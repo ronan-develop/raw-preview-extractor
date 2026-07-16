@@ -50,7 +50,11 @@ $brands = match ($brandArg) {
 };
 
 $extractor = RawPreviewExtractor::createDefault();
-$tmp = sys_get_temp_dir() . '/rpe-audit';
+
+// Un dossier par processus : plusieurs audits peuvent tourner en parallèle
+// (une marque chacun), et le premier qui finissait supprimait le dossier des
+// autres — qui écrivaient alors dans le vide et comptaient des faux échecs.
+$tmp = sys_get_temp_dir() . '/rpe-audit-' . getmypid();
 @mkdir($tmp, 0o755, true);
 
 $results = [];
@@ -93,6 +97,12 @@ foreach ($brands as $brand) {
 }
 
 report($results, $stats);
+
+// rmdir échoue sur un dossier non vide : un téléchargement interrompu peut
+// laisser un fichier derrière lui.
+foreach (glob($tmp . '/*') ?: [] as $leftover) {
+    @unlink($leftover);
+}
 
 @rmdir($tmp);
 
