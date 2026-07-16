@@ -5,25 +5,25 @@ declare(strict_types=1);
 namespace RonanLenouvel\RawPreviewExtractor\Parser\Tiff;
 
 /**
- * Une entrée d'IFD, valeurs déjà résolues.
+ * An IFD entry, values already resolved.
  *
- * Value object pur : il ne connaît ni fichier, ni handle, ni endianness. C'est
- * le {@see TiffReader} qui résout les valeurs à la lecture — y compris celles
- * stockées hors de l'entrée — et construit des `IfdEntry` complètes.
+ * A pure value object: it knows neither file, nor handle, nor endianness. It is
+ * the {@see TiffReader} that resolves the values while reading — including
+ * those stored outside the entry — and builds complete `IfdEntry` objects.
  *
- * Cette entrée est donc librement transportable et comparable, ce qu'un objet
- * qui garderait un curseur de fichier ne serait pas.
+ * This entry is therefore freely transportable and comparable, which an object
+ * holding on to a file cursor would not be.
  */
 final readonly class IfdEntry
 {
     /**
-     * @param int       $tag    identifiant du tag (voir {@see TiffTag})
-     * @param int       $type   code du type de donnée TIFF (1 à 12)
-     * @param int       $count  nombre de valeurs, tel qu'annoncé par l'entrée
-     * @param list<int> $values valeurs numériques résolues ; vide si le type
-     *                          est ASCII ou inconnu
-     * @param string    $ascii  valeur textuelle, NUL de fin retiré ; chaîne
-     *                          vide si le type n'est pas ASCII
+     * @param int       $tag    tag identifier (see {@see TiffTag})
+     * @param int       $type   TIFF data type code (1 to 12)
+     * @param int       $count  number of values, as announced by the entry
+     * @param list<int> $values resolved numeric values; empty if the type is
+     *                          ASCII or unknown
+     * @param string    $ascii  textual value, trailing NUL removed; empty
+     *                          string if the type is not ASCII
      */
     public function __construct(
         public int $tag,
@@ -35,10 +35,10 @@ final readonly class IfdEntry
     }
 
     /**
-     * Première valeur numérique de l'entrée, ou null s'il n'y en a pas.
+     * First numeric value of the entry, or null if there is none.
      *
-     * Raccourci pour le cas courant : la plupart des tags exploités ici
-     * (offsets, tailles, dimensions) portent une valeur unique.
+     * A shortcut for the common case: most tags used here (offsets, sizes,
+     * dimensions) carry a single value.
      */
     public function value(): ?int
     {

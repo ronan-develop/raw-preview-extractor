@@ -10,9 +10,9 @@ use RonanLenouvel\RawPreviewExtractor\Exception\RawPreviewExtractorException;
 use RonanLenouvel\RawPreviewExtractor\Exception\UnsupportedFormatException;
 
 /**
- * Extrait la preview JPEG embarquée dans un fichier RAW.
+ * Extracts the JPEG preview embedded in a RAW file.
  *
- * C'est le point d'entrée du package — le seul type à connaître pour l'utiliser :
+ * This is the package's entry point — the only type to know in order to use it:
  *
  * ```php
  * $extractor = RawPreviewExtractor::createDefault();
@@ -21,36 +21,36 @@ use RonanLenouvel\RawPreviewExtractor\Exception\UnsupportedFormatException;
  *     $preview = $extractor->extract('/photos/IMG_0042.CR2');
  *     file_put_contents('/cache/thumb.jpg', $preview->jpegData);
  * } catch (RawPreviewExtractorException) {
- *     // pas de vignette : l'appelant dégrade comme il l'entend
+ *     // no thumbnail: the caller degrades as it sees fit
  * }
  * ```
  *
- * Sous Symfony, le bundle enregistre une implémentation auto-wirable de cette
- * interface : c'est elle qu'on type-hinte, jamais la classe concrète.
+ * Under Symfony, the bundle registers an autowirable implementation of this
+ * interface: it is the one to type-hint, never the concrete class.
  */
 interface RawPreviewExtractorInterface
 {
     /**
-     * Extrait la preview JPEG du fichier RAW.
+     * Extracts the JPEG preview from the RAW file.
      *
-     * Toutes les exceptions levées implémentent {@see RawPreviewExtractorException} :
-     * un seul `catch` suffit pour dégrader proprement.
+     * Every exception thrown implements {@see RawPreviewExtractorException}: a
+     * single `catch` is enough to degrade gracefully.
      *
-     * @param string $path chemin du fichier RAW
+     * @param string $path path of the RAW file
      *
-     * @throws UnsupportedFormatException le fichier n'est pas un RAW pris en charge
-     * @throws PreviewNotFoundException   fichier valide, mais sans preview JPEG
-     * @throws CorruptedFileException     fichier illisible ou structurellement invalide
+     * @throws UnsupportedFormatException the file is not a supported RAW
+     * @throws PreviewNotFoundException   valid file, but without a JPEG preview
+     * @throws CorruptedFileException     unreadable or structurally invalid file
      */
     public function extract(string $path): ExtractedPreview;
 
     /**
-     * Ce fichier peut-il être traité par ce package ?
+     * Can this file be processed by this package?
      *
-     * La réponse repose sur la **signature binaire** du fichier, jamais sur son
-     * extension : un CR2 renommé en `.jpg` renvoie `true`.
+     * The answer rests on the file's **binary signature**, never on its
+     * extension: a CR2 renamed to `.jpg` returns `true`.
      *
-     * Ne lève jamais — un fichier absent ou illisible renvoie simplement `false`.
+     * Never throws — a missing or unreadable file simply returns `false`.
      */
     public function supports(string $path): bool;
 }

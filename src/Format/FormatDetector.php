@@ -5,25 +5,25 @@ declare(strict_types=1);
 namespace RonanLenouvel\RawPreviewExtractor\Format;
 
 /**
- * Détecte le format RAW par lecture de la signature binaire du fichier.
+ * Detects the RAW format by reading the file's binary signature.
  *
- * L'extension du fichier n'est jamais consultée : un CR2 renommé en `.jpg`
- * reste détecté comme un CR2, et un `.cr2` qui n'en est pas un est rejeté.
+ * The file extension is never consulted: a CR2 renamed to `.jpg` is still
+ * detected as a CR2, and a `.cr2` that is not one is rejected.
  *
- * Deux familles de conteneurs sont reconnues :
- *  - TIFF 6.0 (CR2, NEF, ARW, DNG), discriminé par la signature Canon `CR`
- *    ou par les tags DNGVersion / Make de l'IFD0 ;
- *  - ISO-BMFF (CR3), discriminé par la boîte `ftyp` et le brand `crx `.
+ * Two container families are recognised:
+ *  - TIFF 6.0 (CR2, NEF, ARW, DNG), discriminated by the Canon `CR` signature
+ *    or by the DNGVersion / Make tags of the IFD0;
+ *  - ISO-BMFF (CR3), discriminated by the `ftyp` box and the `crx ` brand.
  */
 final class FormatDetector implements FormatDetectorInterface
 {
-    /** Octets suffisants pour couvrir l'en-tête TIFF, la signature CR2 et le ftyp d'un CR3. */
+    /** Bytes enough to cover the TIFF header, the CR2 signature and a CR3's ftyp. */
     private const HEADER_BYTES = 16;
 
-    /** Nombre magique du format TIFF, lu selon l'endianness du fichier. */
+    /** Magic number of the TIFF format, read according to the file's endianness. */
     private const TIFF_MAGIC = 42;
 
-    /** Au-delà, un IFD0 aussi long trahit un fichier corrompu ou hostile. */
+    /** Beyond this, an IFD0 that long betrays a corrupted or hostile file. */
     private const MAX_IFD0_ENTRIES = 512;
 
     private const TAG_MAKE = 0x010F;
@@ -31,20 +31,20 @@ final class FormatDetector implements FormatDetectorInterface
 
     public function detect(string $path): ?Format
     {
-        // fopen() réussit sur un répertoire : c'est fread() qui échouerait ensuite,
-        // en émettant un notice. On écarte le cas ici plutôt que de le museler.
+        // fopen() succeeds on a directory: it is fread() that would fail next,
+        // emitting a notice. We rule the case out here rather than muzzling it.
         if (!is_file($path)) {
             return null;
         }
 
-        // is_file() a déjà écarté l'absent et le répertoire.
+        // is_file() has already ruled out the missing file and the directory.
         $handle = fopen($path, 'rb');
 
         try {
             $header = fread($handle, self::HEADER_BYTES);
 
-            // fread renvoie moins que demandé en fin de fichier : sans ce contrôle,
-            // unpack() lirait des octets qui n'existent pas.
+            // fread returns less than requested at end of file: without this check,
+            // unpack() would read bytes that do not exist.
             if (!is_string($header) || strlen($header) < 8) {
                 return null;
             }
@@ -57,7 +57,7 @@ final class FormatDetector implements FormatDetectorInterface
     }
 
     /**
-     * CR3 : boîte `ftyp` en tête, brand majeur `crx ` aux octets 8-11.
+     * CR3: `ftyp` box up front, major brand `crx ` at bytes 8-11.
      */
     private function detectIsoBmff(string $header): ?Format
     {
@@ -85,7 +85,7 @@ final class FormatDetector implements FormatDetectorInterface
             return null;
         }
 
-        // CR2 : signature « CR » suivie de la version, juste après l'en-tête TIFF.
+        // CR2: "CR" signature followed by the version, right after the TIFF header.
         if (strlen($header) >= 10 && 'CR' === substr($header, 8, 2)) {
             return Format::CR2;
         }
@@ -100,26 +100,26 @@ final class FormatDetector implements FormatDetectorInterface
     }
 
     /**
-     * @return array{string, string}|null couple de formats unpack() {court, long}
+     * @return array{string, string}|null pair of unpack() formats {short, long}
      */
     private function readEndianness(string $header): ?array
     {
         return match (substr($header, 0, 2)) {
             'II' => ['v', 'V'],  // little-endian
             'MM' => ['n', 'N'],  // big-endian
-            default => null,     // ni l'un ni l'autre : pas un TIFF
+            default => null,     // neither one: not a TIFF
         };
     }
 
     /**
-     * Parcourt les entrées de l'IFD0 à la recherche d'un tag discriminant.
+     * Walks the IFD0 entries looking for a discriminating tag.
      *
      * @param resource $handle
      */
     private function detectFromIfd0($handle, string $shortFormat, string $longFormat, int $ifdOffset): ?Format
     {
-        // fseek au-delà de la fin réussit sur un fichier : c'est la lecture
-        // suivante qui rend une chaîne vide, ce qui est traité juste après.
+        // fseek past the end succeeds on a file: it is the next read that
+        // returns an empty string, which is handled right after.
         fseek($handle, $ifdOffset);
 
         $countBytes = fread($handle, 2);
@@ -145,7 +145,7 @@ final class FormatDetector implements FormatDetectorInterface
 
             $tag = $this->unpackInt($shortFormat, substr($entry, 0, 2));
 
-            // DNGVersion suffit : le format est normalisé par Adobe.
+            // DNGVersion is enough: the format is standardised by Adobe.
             if (self::TAG_DNG_VERSION === $tag) {
                 return Format::DNG;
             }
@@ -159,8 +159,8 @@ final class FormatDetector implements FormatDetectorInterface
     }
 
     /**
-     * Lit la valeur du tag Make, stockée hors de l'entrée dès qu'elle dépasse
-     * 4 octets — ce qui est toujours le cas d'un nom de fabricant.
+     * Reads the value of the Make tag, stored outside the entry as soon as it
+     * exceeds 4 bytes — which is always the case for a manufacturer name.
      *
      * @param resource $handle
      */
@@ -173,17 +173,17 @@ final class FormatDetector implements FormatDetectorInterface
             return null;
         }
 
-        // La position courante doit être restaurée : la boucle appelante
-        // continue de lire les entrées séquentiellement. Sur un flux fichier
-        // local, ftell/fseek n'échouent pas — inutile de s'en garder.
+        // The current position must be restored: the calling loop keeps reading
+        // the entries sequentially. On a local file stream, ftell/fseek do not
+        // fail — no need to guard against it.
         $position = (int) ftell($handle);
         fseek($handle, $offset);
 
         $value = (string) fread($handle, $count);
         fseek($handle, $position);
 
-        // Un offset hors bornes ne fait pas échouer fseek : c'est la lecture
-        // qui rend une chaîne vide.
+        // An out-of-bounds offset does not make fseek fail: it is the read that
+        // returns an empty string.
         return '' === $value ? null : rtrim($value, "\x00");
     }
 
@@ -204,15 +204,14 @@ final class FormatDetector implements FormatDetectorInterface
     }
 
     /**
-     * Vérifie la longueur avant unpack() : un fread en fin de fichier rend moins
-     * d'octets que demandé, silencieusement. Une fois la longueur garantie,
-     * unpack() ne peut plus échouer.
+     * Checks the length before unpack(): a fread at end of file returns fewer
+     * bytes than requested, silently. Once the length is guaranteed, unpack()
+     * can no longer fail.
      */
     private function unpackInt(string $format, string $bytes): ?int
     {
-        // Les octets viennent soit de l'en-tête (8 octets garantis), soit d'un
-        // fread dont la longueur est vérifiée par l'appelant : unpack ne peut
-        // pas travailler à court.
+        // The bytes come either from the header (8 bytes guaranteed), or from a
+        // fread whose length is checked by the caller: unpack cannot work short.
         return unpack($format, $bytes)[1];
     }
 }

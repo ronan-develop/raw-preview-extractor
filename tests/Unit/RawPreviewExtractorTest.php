@@ -56,7 +56,7 @@ final class RawPreviewExtractorTest extends TestCase
     public function testThrowsUnsupportedFormatForNonRaw(): void
     {
         $this->expectException(UnsupportedFormatException::class);
-        $this->expectExceptionMessage('non supporté');
+        $this->expectExceptionMessage('Unsupported format');
 
         (new RawPreviewExtractor($this->detectorReturning(null), []))->extract('/photo.jpg');
     }

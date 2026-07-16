@@ -10,21 +10,21 @@ use RonanLenouvel\RawPreviewExtractor\ExtractedPreview;
 use RonanLenouvel\RawPreviewExtractor\Format\Format;
 
 /**
- * Extrait la preview JPEG d'un fichier RAW d'un conteneur donné.
+ * Extracts the JPEG preview of a RAW file of a given container.
  *
- * Une implémentation par famille de conteneur : TIFF pour CR2/NEF/ARW/DNG,
- * ISO-BMFF pour CR3. Toutes sont interchangeables derrière ce contrat — c'est
- * ce qui permet à la façade de résoudre par une simple map `Format → parser`,
- * et d'accueillir un nouveau format sans être modifiée.
+ * One implementation per container family: TIFF for CR2/NEF/ARW/DNG, ISO-BMFF
+ * for CR3. All are interchangeable behind this contract — that is what lets the
+ * facade resolve through a simple `Format → parser` map, and welcome a new
+ * format without being modified.
  */
 interface PreviewParserInterface
 {
     /**
-     * @param string $path   chemin du fichier RAW
-     * @param Format $format format déjà identifié par le détecteur
+     * @param string $path   path of the RAW file
+     * @param Format $format format already identified by the detector
      *
-     * @throws PreviewNotFoundException si le fichier est valide mais sans preview
-     * @throws CorruptedFileException   si le fichier est illisible ou incohérent
+     * @throws PreviewNotFoundException if the file is valid but without a preview
+     * @throws CorruptedFileException   if the file is unreadable or inconsistent
      */
     public function extract(string $path, Format $format): ExtractedPreview;
 }

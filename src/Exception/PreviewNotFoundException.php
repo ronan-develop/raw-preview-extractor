@@ -5,13 +5,13 @@ declare(strict_types=1);
 namespace RonanLenouvel\RawPreviewExtractor\Exception;
 
 /**
- * Le fichier est valide, mais ne contient aucune preview JPEG exploitable.
+ * The file is valid, but contains no usable JPEG preview.
  *
- * Cas typiques : aucun tag ne désigne de JPEG, ou la taille annoncée est nulle.
+ * Typical cases: no tag points to a JPEG, or the announced size is zero.
  *
- * À distinguer de {@see CorruptedFileException} : un fichier **tronqué** ou dont
- * un offset ment est corrompu, pas dépourvu de preview. Cette frontière est
- * testée — ne la brouille pas.
+ * To be distinguished from {@see CorruptedFileException}: a **truncated** file, or
+ * one whose offset lies, is corrupted, not devoid of a preview. This boundary is
+ * tested — do not blur it.
  */
 final class PreviewNotFoundException extends \RuntimeException implements RawPreviewExtractorException
 {

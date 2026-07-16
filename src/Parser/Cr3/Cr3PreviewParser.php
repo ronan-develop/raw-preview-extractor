@@ -11,51 +11,51 @@ use RonanLenouvel\RawPreviewExtractor\Format\Format;
 use RonanLenouvel\RawPreviewExtractor\Parser\PreviewParserInterface;
 
 /**
- * Extrait la preview JPEG d'un CR3 (Canon RAW v3, conteneur ISO-BMFF).
+ * Extracts the JPEG preview of a CR3 (Canon RAW v3, ISO-BMFF container).
  *
- * La preview vit dans la boîte `PRVW`, sous une boîte `uuid` dédiée **à la racine**
- * du fichier. `THMB` porte une vignette bien plus petite, sous l'UUID Canon, et
- * sert de repli.
+ * The preview lives in the `PRVW` box, under a dedicated `uuid` box **at the
+ * root** of the file. `THMB` carries a much smaller thumbnail, under the Canon
+ * UUID, and serves as a fallback.
  *
- * **Le CR3 n'a pas de spécification publique** : sa structure vient de
- * rétro-ingénierie communautaire et peut varier selon les modèles. Le code est
- * donc écrit pour être tolérant — il localise le JPEG par son magic plutôt que
- * de s'appuyer sur des décalages fixes.
+ * **CR3 has no public specification**: its structure comes from community
+ * reverse engineering and may vary depending on the model. The code is
+ * therefore written to be tolerant — it locates the JPEG by its magic rather
+ * than relying on fixed offsets.
  *
- * Ce parseur orchestre : il ne lit pas d'octets lui-même, il délègue à
+ * This parser orchestrates: it does not read bytes itself, it delegates to
  * {@see IsoBmffBoxReader}.
  */
 final class Cr3PreviewParser implements PreviewParserInterface
 {
     /**
-     * Emplacements des previews, par ordre de préférence.
+     * Preview locations, in order of preference.
      *
-     * `PRVW` et `THMB` ne vivent **ni sous le même UUID, ni au même niveau** —
-     * structure vérifiée sur Canon EOS R et EOS RP :
+     * `PRVW` and `THMB` live **neither under the same UUID, nor at the same
+     * level** — structure verified on Canon EOS R and EOS RP:
      *
      * ```
      * ftyp
      * moov
-     *   └── uuid 85c0b687…   → CMT1, CMT2, THMB   (vignette ~15 Ko)
-     * uuid eaf42b5e…          → PRVW              (preview ~250 Ko)
+     *   └── uuid 85c0b687…   → CMT1, CMT2, THMB   (thumbnail ~15 KB)
+     * uuid eaf42b5e…          → PRVW              (preview ~250 KB)
      * mdat
      * ```
      *
-     * Chercher les deux sous l'UUID Canon ne trouve que la vignette.
+     * Looking for both under the Canon UUID only finds the thumbnail.
      *
      * @var list<array{uuid: string, box: string}>
      */
     private const PREVIEW_LOCATIONS = [
-        // La vraie preview, dans sa propre boîte uuid à la racine.
+        // The real preview, in its own uuid box at the root.
         ['uuid' => 'eaf42b5e1c984b88b9fbb7dc406e4d16', 'box' => 'PRVW'],
-        // Repli : la vignette de l'UUID Canon, sous moov.
+        // Fallback: the thumbnail of the Canon UUID, under moov.
         ['uuid' => '85c0b687820f11e08111f4ce462b6a48', 'box' => 'THMB'],
     ];
 
-    /** Marqueur de début de tout JPEG (SOI). */
+    /** Start marker of every JPEG (SOI). */
     private const JPEG_MAGIC = "\xFF\xD8";
 
-    /** Longueur de l'UUID qui suit le type d'une boîte `uuid`. */
+    /** Length of the UUID that follows the type of a `uuid` box. */
     private const UUID_LENGTH = 16;
 
     public function extract(string $path, Format $format): ExtractedPreview
@@ -79,20 +79,20 @@ final class Cr3PreviewParser implements PreviewParserInterface
         }
 
         throw new PreviewNotFoundException(sprintf(
-            'Aucune preview JPEG dans %s : ni PRVW ni THMB exploitable.',
+            'No JPEG preview in %s: neither PRVW nor THMB usable.',
             basename($path),
         ));
     }
 
     /**
-     * Extrait le JPEG d'une boîte de preview, s'il s'y trouve.
+     * Extracts the JPEG from a preview box, if it is there.
      *
-     * @throws CorruptedFileException si la structure est invalide
+     * @throws CorruptedFileException if the structure is invalid
      */
     private function jpegFromBox(IsoBmffBoxReader $reader, Box $container, string $type): ?string
     {
-        // Certains conteneurs uuid commencent par des octets propriétaires :
-        // le parcours normal échoue alors, on retombe sur une recherche par type.
+        // Some uuid containers start with proprietary bytes: the normal walk
+        // then fails, and we fall back on a search by type.
         $box = $this->findWithin($reader, $container, $type)
             ?? $this->findByScanning($reader, $container, $type);
 
@@ -102,23 +102,23 @@ final class Cr3PreviewParser implements PreviewParserInterface
 
         $payload = $reader->readPayload($box);
 
-        // PRVW précède son JPEG d'un en-tête propriétaire dont la taille varie
-        // selon les modèles et n'est pas documentée. Chercher le magic est plus
-        // robuste que de coder un décalage en dur — et le magic est à valider
-        // de toute façon.
+        // PRVW precedes its JPEG with a proprietary header whose size varies
+        // between models and is not documented. Looking for the magic is more
+        // robust than hard-coding an offset — and the magic has to be validated
+        // anyway.
         $start = strpos($payload, self::JPEG_MAGIC);
 
         return false === $start ? null : substr($payload, $start);
     }
 
     /**
-     * Cherche une boîte parmi les filles directes d'un conteneur uuid.
+     * Looks for a box among the direct children of a uuid container.
      *
-     * On ne cherche pas dans tout le fichier : une boîte `PRVW` ailleurs
-     * n'est pas la preview du CR3, et s'y fier reviendrait à faire confiance
-     * à n'importe quelle boîte portant le bon nom.
+     * We do not search the whole file: a `PRVW` box elsewhere is not the CR3's
+     * preview, and relying on it would amount to trusting any box carrying the
+     * right name.
      *
-     * @throws CorruptedFileException si la structure est invalide
+     * @throws CorruptedFileException if the structure is invalid
      */
     private function findWithin(IsoBmffBoxReader $reader, Box $container, string $type): ?Box
     {
@@ -132,23 +132,23 @@ final class Cr3PreviewParser implements PreviewParserInterface
     }
 
     /**
-     * Cherche une boîte dans le contenu brut d'un conteneur, sans supposer que
-     * celui-ci commence par une boîte.
+     * Looks for a box in the raw content of a container, without assuming that
+     * the latter starts with a box.
      *
-     * La boîte `uuid` qui porte `PRVW` insère **8 octets propriétaires** entre
-     * l'UUID et la première boîte — vérifié sur EOS R et EOS RP. Sa taille n'est
-     * documentée nulle part, et rien ne garantit qu'elle soit la même partout.
-     * On localise donc le type recherché dans le contenu, plutôt que de coder un
-     * décalage en dur.
+     * The `uuid` box carrying `PRVW` inserts **8 proprietary bytes** between the
+     * UUID and the first box — verified on EOS R and EOS RP. Its size is
+     * documented nowhere, and nothing guarantees it is the same everywhere. We
+     * therefore locate the sought type within the content, rather than
+     * hard-coding an offset.
      *
-     * @throws CorruptedFileException si la structure est invalide
+     * @throws CorruptedFileException if the structure is invalid
      */
     private function findByScanning(IsoBmffBoxReader $reader, Box $container, string $type): ?Box
     {
         $payload = $reader->readPayload($container);
         $position = strpos($payload, $type, self::UUID_LENGTH);
 
-        // Le type est précédé des 4 octets de taille : la boîte commence là.
+        // The type is preceded by the 4 size bytes: the box starts there.
         if (false === $position || $position < 4) {
             return null;
         }
@@ -164,11 +164,11 @@ final class Cr3PreviewParser implements PreviewParserInterface
     }
 
     /**
-     * Lit les dimensions dans le segment SOF du JPEG.
+     * Reads the dimensions from the JPEG's SOF segment.
      *
      * @return array{int, int}
      *
-     * @throws CorruptedFileException si aucun segment SOF n'est trouvable
+     * @throws CorruptedFileException if no SOF segment can be found
      */
     private function readJpegDimensions(string $jpeg): array
     {
@@ -184,7 +184,7 @@ final class Cr3PreviewParser implements PreviewParserInterface
 
             $marker = ord($jpeg[$position + 1]);
 
-            // SOF0 à SOF15, hors DHT (C4), DNL (C8) et DAC (CC) qui partagent la plage.
+            // SOF0 to SOF15, except DHT (C4), DNL (C8) and DAC (CC) which share the range.
             if ($marker >= 0xC0 && $marker <= 0xCF && !in_array($marker, [0xC4, 0xC8, 0xCC], true)) {
                 return [
                     unpack('n', substr($jpeg, $position + 7, 2))[1],
@@ -196,7 +196,7 @@ final class Cr3PreviewParser implements PreviewParserInterface
         }
 
         throw new CorruptedFileException(
-            'JPEG sans segment SOF : dimensions introuvables.',
+            'JPEG without SOF segment: dimensions not found.',
         );
     }
 }

@@ -7,15 +7,15 @@ namespace RonanLenouvel\RawPreviewExtractor\Parser\Tiff;
 use RonanLenouvel\RawPreviewExtractor\Exception\CorruptedFileException;
 
 /**
- * Lecture bas niveau d'un conteneur TIFF 6.0.
+ * Low-level reading of a TIFF 6.0 container.
  *
- * Ce lecteur connaît la **structure** du conteneur — en-tête, chaîne d'IFD,
- * entrées typées — et rien de la sémantique du contenu : il ignore ce qu'est
- * une preview. C'est cette frontière qui le rend testable sans fichier RAW réel.
+ * This reader knows the container's **structure** — header, IFD chain, typed
+ * entries — and nothing of the content's semantics: it has no idea what a
+ * preview is. It is this boundary that makes it testable without a real RAW file.
  *
- * Toutes les lectures traitent le fichier comme de l'entrée **non fiable** :
- * chaque offset est validé contre la taille réelle, chaque `fread` est vérifié
- * en longueur avant `unpack`, et la chaîne d'IFD est protégée contre les boucles.
+ * All reads treat the file as **untrusted** input: every offset is validated
+ * against the real size, every `fread` is checked for length before `unpack`,
+ * and the IFD chain is protected against loops.
  */
 final class TiffReader
 {
@@ -23,26 +23,26 @@ final class TiffReader
     private const TIFF_MAGIC = 42;
     private const ENTRY_LENGTH = 12;
 
-    /** Au-delà, un IFD trahit un fichier corrompu ou hostile. */
+    /** Beyond this, an IFD betrays a corrupted or hostile file. */
     private const MAX_ENTRIES_PER_IFD = 4096;
 
-    /** Garde-fou contre une chaîne d'IFD artificiellement longue. */
+    /** Safeguard against an artificially long IFD chain. */
     private const MAX_IFD_CHAIN = 64;
 
     /**
-     * Au-delà, une valeur n'est pas résolue — l'entrée reste lisible.
+     * Beyond this, a value is not resolved — the entry stays readable.
      *
-     * Aucun tag exploité par ce package n'approche cette taille : ce sont des
-     * offsets, des tailles, des dimensions, un nom de fabricant. Les gros blocs
-     * sont des métadonnées propriétaires (`MakerNote` pèse couramment 75 Ko dans
-     * un CR2) que l'on traverse sans jamais les lire.
+     * No tag used by this package comes close to this size: they are offsets,
+     * sizes, dimensions, a manufacturer name. The big blocks are proprietary
+     * metadata (`MakerNote` commonly weighs 75 KB in a CR2) that we traverse
+     * without ever reading them.
      *
-     * Ne pas les résoudre évite deux choses : gaspiller la lecture, et rejeter
-     * un fichier parfaitement valide — ce qui arrivait au Canon 5D de 2005.
+     * Not resolving them avoids two things: wasting the read, and rejecting a
+     * perfectly valid file — which is what happened to the 2005 Canon 5D.
      */
     private const MAX_RESOLVED_VALUE_LENGTH = 65536;
 
-    /** Taille en octets de chaque type TIFF 6.0, indexée par code de type. */
+    /** Size in bytes of each TIFF 6.0 type, indexed by type code. */
     private const TYPE_SIZES = [
         1 => 1,   // BYTE
         2 => 1,   // ASCII
@@ -66,33 +66,33 @@ final class TiffReader
     private readonly int $firstIfdOffset;
 
     /**
-     * @param string $path chemin du fichier TIFF à lire
+     * @param string $path path of the TIFF file to read
      *
-     * @throws CorruptedFileException si le fichier est illisible ou n'est pas un TIFF
+     * @throws CorruptedFileException if the file is unreadable or is not a TIFF
      */
     public function __construct(private readonly string $path)
     {
         if (!is_file($path)) {
-            throw new CorruptedFileException(sprintf('Fichier illisible : %s', $path));
+            throw new CorruptedFileException(sprintf('Unreadable file: %s', $path));
         }
 
-        // is_file() a déjà écarté l'absent et le répertoire : fopen ne peut
-        // plus échouer que sur un problème de droits, que le @ absorberait
-        // silencieusement — on le laisse donc remonter.
+        // is_file() has already ruled out the missing file and the directory:
+        // fopen can now only fail on a permissions problem, which @ would
+        // absorb silently — so we let it bubble up.
         $this->handle = fopen($path, 'rb');
         $this->fileSize = (int) filesize($path);
 
         $header = (string) fread($this->handle, self::HEADER_LENGTH);
 
         if (self::HEADER_LENGTH !== strlen($header)) {
-            throw new CorruptedFileException('En-tête TIFF tronqué : moins de 8 octets.');
+            throw new CorruptedFileException('Truncated TIFF header: fewer than 8 bytes.');
         }
 
         $this->bigEndian = match (substr($header, 0, 2)) {
             'II' => false,
             'MM' => true,
             default => throw new CorruptedFileException(
-                'Ordre d\'octets inconnu : ni « II » ni « MM ».',
+                'Unknown byte order: neither "II" nor "MM".',
             ),
         };
 
@@ -100,7 +100,7 @@ final class TiffReader
 
         if (self::TIFF_MAGIC !== $magic) {
             throw new CorruptedFileException(
-                sprintf('Nombre magique TIFF invalide : %d au lieu de 42.', $magic),
+                sprintf('Invalid TIFF magic number: %d instead of 42.', $magic),
             );
         }
 
@@ -113,7 +113,7 @@ final class TiffReader
     }
 
     /**
-     * Le fichier est-il big-endian (« MM ») ?
+     * Is the file big-endian ("MM")?
      */
     public function isBigEndian(): bool
     {
@@ -121,15 +121,15 @@ final class TiffReader
     }
 
     /**
-     * Parcourt la chaîne d'IFD et renvoie les offsets rencontrés, dans l'ordre.
+     * Walks the IFD chain and returns the offsets encountered, in order.
      *
-     * Un IFD déjà visité clôt le parcours : c'est le garde-fou anti-boucle. Un
-     * fichier corrompu — ou malveillant — peut faire pointer un IFD sur lui-même,
-     * ce qu'aucun fichier réel ne fait.
+     * An already visited IFD ends the walk: that is the anti-loop safeguard. A
+     * corrupted — or malicious — file can make an IFD point to itself, which no
+     * real file does.
      *
      * @return list<int>
      *
-     * @throws CorruptedFileException si un offset de la chaîne est hors bornes
+     * @throws CorruptedFileException if an offset of the chain is out of bounds
      */
     public function readIfdOffsets(): array
     {
@@ -151,11 +151,11 @@ final class TiffReader
     }
 
     /**
-     * Lit les entrées d'un IFD situé à l'offset donné.
+     * Reads the entries of an IFD located at the given offset.
      *
      * @return list<IfdEntry>
      *
-     * @throws CorruptedFileException si l'offset est hors bornes ou l'IFD tronqué
+     * @throws CorruptedFileException if the offset is out of bounds or the IFD truncated
      */
     public function readIfd(int $offset): array
     {
@@ -172,9 +172,9 @@ final class TiffReader
     }
 
     /**
-     * Construit une entrée à partir de ses 12 octets, valeurs résolues comprises.
+     * Builds an entry from its 12 bytes, resolved values included.
      *
-     * @throws CorruptedFileException si un offset indirect est hors bornes
+     * @throws CorruptedFileException if an indirect offset is out of bounds
      */
     private function readEntry(string $bytes): IfdEntry
     {
@@ -185,36 +185,35 @@ final class TiffReader
 
         $size = self::TYPE_SIZES[$type] ?? null;
 
-        // Un type inconnu n'est pas une corruption : l'entrée reste lisible,
-        // seule sa valeur est indéterminable.
+        // An unknown type is not a corruption: the entry stays readable, only
+        // its value is undeterminable.
         if (null === $size || $count < 1) {
             return new IfdEntry($tag, $type, $count);
         }
 
         $length = $size * $count;
 
-        // Une valeur ne peut pas être plus grande que le fichier qui la porte :
-        // c'est une taille absurde, donc une structure qui ment.
+        // A value cannot be larger than the file that carries it: that is an
+        // absurd size, hence a structure that lies.
         if ($length > $this->fileSize) {
             throw new CorruptedFileException(sprintf(
-                'Entrée 0x%04X : %d octets annoncés, plus que le fichier entier (%d).',
+                'Entry 0x%04X: %d bytes announced, more than the whole file (%d).',
                 $tag,
                 $length,
                 $this->fileSize,
             ));
         }
 
-        // Trop gros pour être un tag que ce package exploite : on garde l'entrée
-        // — elle reste traversable — mais on ne lit pas sa valeur. Un MakerNote
-        // de 75 Ko n'est pas une corruption, c'est une métadonnée qui ne nous
-        // regarde pas.
+        // Too big to be a tag this package uses: we keep the entry — it stays
+        // traversable — but we do not read its value. A 75 KB MakerNote is not
+        // a corruption, it is metadata that is none of our business.
         if ($length > self::MAX_RESOLVED_VALUE_LENGTH) {
             return new IfdEntry($tag, $type, $count);
         }
 
-        // Règle des 4 octets : au-delà, le champ porte un offset absolu et non
-        // la valeur elle-même. S'y tromper donne des offsets qui ressemblent à
-        // des données valides.
+        // The 4-byte rule: beyond that, the field carries an absolute offset and
+        // not the value itself. Getting it wrong yields offsets that look like
+        // valid data.
         $raw = $length <= 4
             ? substr($field, 0, $length)
             : $this->readBytes($this->unpackLong($field), $length);
@@ -227,19 +226,19 @@ final class TiffReader
     }
 
     /**
-     * Lit `$length` octets bruts à partir de `$offset`.
+     * Reads `$length` raw bytes starting from `$offset`.
      *
-     * @throws CorruptedFileException si la plage sort du fichier
+     * @throws CorruptedFileException if the range falls outside the file
      */
     public function readBytes(int $offset, int $length): string
     {
         if ($length <= 0) {
-            throw new CorruptedFileException(sprintf('Longueur de lecture invalide : %d.', $length));
+            throw new CorruptedFileException(sprintf('Invalid read length: %d.', $length));
         }
 
         if ($offset < 0 || $offset + $length > $this->fileSize) {
             throw new CorruptedFileException(sprintf(
-                'Lecture hors bornes : %d octets à l\'offset %d (taille du fichier : %d).',
+                'Read out of bounds: %d bytes at offset %d (file size: %d).',
                 $length,
                 $offset,
                 $this->fileSize,
@@ -248,17 +247,17 @@ final class TiffReader
 
         fseek($this->handle, $offset);
 
-        // La plage est déjà bornée contre fileSize : fread rend exactement
-        // $length octets.
+        // The range is already bounded against fileSize: fread returns exactly
+        // $length bytes.
         return (string) fread($this->handle, $length);
     }
 
     /**
-     * Décode une suite d'entiers selon l'endianness du fichier.
+     * Decodes a sequence of integers according to the file's endianness.
      *
-     * Les octets sont toujours fournis par readBytes(), qui garantit déjà leur
-     * longueur : inutile de la revérifier ici. TYPE_SIZES ne contient que des
-     * tailles de 1, 2, 4 ou 8 octets.
+     * The bytes always come from readBytes(), which already guarantees their
+     * length: no need to check it again here. TYPE_SIZES only contains sizes of
+     * 1, 2, 4 or 8 bytes.
      *
      * @return list<int>
      */
@@ -272,8 +271,8 @@ final class TiffReader
             $values[] = match ($size) {
                 1 => ord($chunk),
                 2 => $this->unpackShort($chunk),
-                // RATIONAL et DOUBLE (8 octets) : seuls les 4 premiers nous
-                // intéressent — aucun tag exploité ici n'a besoin du reste.
+                // RATIONAL and DOUBLE (8 bytes): only the first 4 are of
+                // interest to us — no tag used here needs the rest.
                 default => $this->unpackLong(substr($chunk, 0, 4)),
             };
         }
@@ -282,7 +281,7 @@ final class TiffReader
     }
 
     /**
-     * Décode un entier 16 bits selon l'endianness du fichier.
+     * Decodes a 16-bit integer according to the file's endianness.
      */
     private function unpackShort(string $bytes): int
     {
@@ -290,9 +289,9 @@ final class TiffReader
     }
 
     /**
-     * Décode un entier 32 bits selon l'endianness du fichier.
+     * Decodes a 32-bit integer according to the file's endianness.
      *
-     * @throws CorruptedFileException si les octets fournis ne font pas 4 octets
+     * @throws CorruptedFileException if the bytes supplied are not 4 bytes long
      */
     private function unpackLong(string $bytes): int
     {
@@ -300,13 +299,13 @@ final class TiffReader
     }
 
     /**
-     * @throws CorruptedFileException si l'offset est invalide ou le compte absurde
+     * @throws CorruptedFileException if the offset is invalid or the count absurd
      */
     private function readEntryCount(int $offset): int
     {
         if ($offset < self::HEADER_LENGTH) {
             throw new CorruptedFileException(sprintf(
-                'Offset d\'IFD invalide : %d chevauche l\'en-tête.',
+                'Invalid IFD offset: %d overlaps the header.',
                 $offset,
             ));
         }
@@ -315,17 +314,17 @@ final class TiffReader
 
         if ($count > self::MAX_ENTRIES_PER_IFD) {
             throw new CorruptedFileException(sprintf(
-                'Nombre d\'entrées d\'IFD absurde : %d.',
+                'Absurd IFD entry count: %d.',
                 $count,
             ));
         }
 
-        // Le fichier doit contenir toutes les entrées annoncées, plus le lien suivant.
+        // The file must contain every announced entry, plus the next link.
         $required = $offset + 2 + $count * self::ENTRY_LENGTH + 4;
 
         if ($required > $this->fileSize) {
             throw new CorruptedFileException(sprintf(
-                'IFD tronqué : %d entrées annoncées à l\'offset %d dépassent la taille du fichier.',
+                'Truncated IFD: %d entries announced at offset %d exceed the file size.',
                 $count,
                 $offset,
             ));
@@ -335,7 +334,7 @@ final class TiffReader
     }
 
     /**
-     * @throws CorruptedFileException si l'IFD est tronqué
+     * @throws CorruptedFileException if the IFD is truncated
      */
     private function readNextIfdOffset(int $offset): int
     {

@@ -13,11 +13,11 @@ use Symfony\Component\DependencyInjection\Loader\Configurator\ContainerConfigura
 use function Symfony\Component\DependencyInjection\Loader\Configurator\service;
 
 /*
- * Définitions explicites, sans autowiring ni autoconfiguration.
+ * Explicit definitions, without autowiring or autoconfiguration.
  *
- * C'est la règle bundle la plus souvent violée : un bundle réutilisable câble
- * ses services à la main. Activer l'autowiring ici polluerait la configuration
- * de l'application consommatrice.
+ * This is the most often violated bundle rule: a reusable bundle wires its
+ * services by hand. Enabling autowiring here would pollute the configuration of
+ * the consuming application.
  */
 return static function (ContainerConfigurator $container): void {
     $services = $container->services();
@@ -26,10 +26,10 @@ return static function (ContainerConfigurator $container): void {
     $services->set('raw_preview_extractor.parser.tiff', TiffPreviewParser::class);
     $services->set('raw_preview_extractor.parser.cr3', Cr3PreviewParser::class);
 
-    // La map qui porte l'OCP : ajouter RAF ou ORF en v2 se fera par une ligne
-    // ici, sans toucher à la façade. Les clés sont les valeurs de l'enum Format,
-    // construites explicitement — un tag auto-collecté exigerait de
-    // l'autoconfiguration, interdite dans un bundle.
+    // The map that carries the OCP: adding RAF or ORF in v2 will be done with a
+    // line here, without touching the facade. The keys are the values of the
+    // Format enum, built explicitly — an auto-collected tag would require
+    // autoconfiguration, which is forbidden in a bundle.
     $services->set('raw_preview_extractor.extractor', RawPreviewExtractor::class)
         ->args([
             service('raw_preview_extractor.format_detector'),
@@ -42,8 +42,8 @@ return static function (ContainerConfigurator $container): void {
             ],
         ]);
 
-    // Seule l'interface est exposée : les parseurs et le détecteur restent
-    // privés, ce sont des détails d'implémentation.
+    // Only the interface is exposed: the parsers and the detector stay private,
+    // they are implementation details.
     $services->alias(RawPreviewExtractorInterface::class, 'raw_preview_extractor.extractor')
         ->public();
 };

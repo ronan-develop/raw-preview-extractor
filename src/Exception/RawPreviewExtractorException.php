@@ -5,20 +5,20 @@ declare(strict_types=1);
 namespace RonanLenouvel\RawPreviewExtractor\Exception;
 
 /**
- * Interface marqueur commune à toutes les exceptions du package.
+ * Marker interface common to every exception of the package.
  *
- * Elle permet à l'appelant de dégrader proprement avec un seul `catch`, sans
- * connaître le détail des cas d'échec :
+ * It lets the caller degrade gracefully with a single `catch`, without knowing
+ * the detail of the failure cases:
  *
  * ```php
  * try {
  *     $preview = $extractor->extract($path);
  * } catch (RawPreviewExtractorException) {
- *     // pas de vignette : on continue sans
+ *     // no thumbnail: carry on without one
  * }
  * ```
  *
- * Toute exception levée par ce package l'implémente — c'est un invariant testé.
+ * Every exception thrown by this package implements it — a tested invariant.
  */
 interface RawPreviewExtractorException extends \Throwable
 {

@@ -271,13 +271,28 @@ iPhone 6s Plus   iPhone 7 Plus   iPhone SE   iPhone XS   iPhone 12 Pro
 
 ### Known to have no preview
 
-These files contain **no JPEG at all** — verified byte by byte. `PreviewNotFoundException`
-is the correct response, not a defect:
+These models throw `PreviewNotFoundException` — **and that is the correct answer**. Their
+files contain no JPEG whatsoever, which is verifiable in one command:
 
-| Model                                           | What the file actually holds              |
-|-------------------------------------------------|-------------------------------------------|
-| Nikon D1H (2001)                                | uncompressed 160×120 RGB thumbnail        |
-| Nikon COOLSCAN V ED                             | film scanner, no camera preview           |
-| Apple iPhone 8                                  | 64 sensor tiles, no JPEG                  |
-| Canon PowerShot SX100 IS, SX510 HS, ELPH 130 IS | CHDK DNGs, uncompressed 128×96 thumbnail  |
-| Canon PowerShot G7 X, IXY 220F                  | `.CRW` — pre-CR2 format, out of scope     |
+```bash
+grep -c $'\xff\xd8\xff' some-file.dng    # 0 — not a single JPEG marker in the file
+```
+
+| Model                                           | What the file actually holds       |
+|-------------------------------------------------|------------------------------------|
+| Nikon D1H (2001)                                | uncompressed 160×120 RGB thumbnail |
+| Nikon COOLSCAN V ED                             | film scanner output                |
+| Apple iPhone 8                                  | 64 sensor tiles, no JPEG           |
+| Canon PowerShot SX100 IS, SX510 HS, ELPH 130 IS | uncompressed 128×96 thumbnail      |
+| Canon PowerShot G7 X, IXY 220F                  | `.CRW` — pre-CR2, out of scope     |
+
+Two reasons, neither of them a parser bug. **The oldest bodies predate the convention**: a
+D1H from 2001 stores a raw RGB thumbnail because embedding a JPEG preview was not yet
+standard practice. **The compacts never had a RAW mode**: their DNGs come from
+[CHDK](https://chdk.fandom.com/), an alternative firmware that writes sensor data with a
+minimal thumbnail.
+
+There is nothing to extract in those files, so throwing is right — returning something
+would mean fabricating it.
+
+**Success rate on files that actually contain a preview: 100 %.**
