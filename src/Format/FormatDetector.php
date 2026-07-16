@@ -31,6 +31,12 @@ final class FormatDetector implements FormatDetectorInterface
 
     public function detect(string $path): ?Format
     {
+        // fopen() réussit sur un répertoire : c'est fread() qui échouerait ensuite,
+        // en émettant un notice. On écarte le cas ici plutôt que de le museler.
+        if (!is_file($path)) {
+            return null;
+        }
+
         $handle = @fopen($path, 'rb');
 
         if (false === $handle) {
