@@ -1,0 +1,15 @@
+# Ce qui ne descend pas chez le consommateur du package.
+#
+# Composer installe depuis l'archive « dist » que GitHub génère en respectant
+# export-ignore : ces fichiers restent sur GitHub — la CI et les contributeurs
+# les ont — mais n'alourdissent pas un `composer require`.
+#
+# Vérifier avant publication : composer archive --format=zip
+/.github/            export-ignore
+/tests/              export-ignore
+/bin/                export-ignore
+/.gitattributes      export-ignore
+/.gitignore          export-ignore
+/phpunit.dist.xml    export-ignore
+
+# LICENSE et README restent : ils font partie de ce qu'on publie.
