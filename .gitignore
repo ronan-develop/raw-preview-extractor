@@ -1,0 +1,25 @@
+/vendor/
+composer.lock
+
+/.phpunit.cache/
+.phpunit.result.cache
+/coverage/
+coverage.xml
+clover.xml
+
+# RAW réels de développement — JAMAIS commités.
+# Repo public + historique git permanent + EXIF (numéro de série, GPS) dans l'IFD0
+# que la troncature n'efface pas. Les tests commités utilisent des octets forgés
+# en mémoire ; ces fichiers ne servent qu'à valider en local. Voir skill `fixtures`.
+/tests/Fixtures/local/
+
+.idea/
+.vscode/
+.DS_Store
+
+# Fichiers de configuration locaux, secrets ou temporaires.
+.env.local
+
+# Config Claude Code — locale pour le moment, non publiée.
+/.claude/
+/CLAUDE.md
