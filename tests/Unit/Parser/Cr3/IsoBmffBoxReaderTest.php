@@ -165,6 +165,17 @@ final class IsoBmffBoxReaderTest extends TestCase
         self::assertSame('uuid', $found->type);
     }
 
+    public function testFindsUuidNestedInsideMoov(): void
+    {
+        // Dans un CR3 réel, l'UUID Canon vit SOUS moov — jamais à la racine.
+        // Une recherche limitée au premier niveau ne le trouverait pas.
+        $uuid = (string) hex2bin('85c0b687820f11e08111f4ce462b6a48');
+        $bytes = $this->box('ftyp', 'crx isom')
+            . $this->box('moov', $this->box('uuid', $uuid . $this->box('PRVW', 'CIBLE')));
+
+        self::assertNotNull($this->reader($bytes)->findUuid($uuid));
+    }
+
     public function testFindUuidReturnsNullForOtherUuid(): void
     {
         $bytes = $this->box('uuid', hex2bin('00112233445566778899aabbccddeeff') . 'x');
