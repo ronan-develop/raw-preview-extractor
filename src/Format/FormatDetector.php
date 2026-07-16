@@ -121,9 +121,9 @@ final class FormatDetector implements FormatDetectorInterface
      */
     private function detectFromIfd0($handle, string $shortFormat, string $longFormat, int $ifdOffset): ?Format
     {
-        if (-1 === fseek($handle, $ifdOffset)) {
-            return null;
-        }
+        // fseek au-delà de la fin réussit sur un fichier : c'est la lecture
+        // suivante qui rend une chaîne vide, ce qui est traité juste après.
+        fseek($handle, $ifdOffset);
 
         $countBytes = fread($handle, 2);
 
@@ -177,21 +177,17 @@ final class FormatDetector implements FormatDetectorInterface
         }
 
         // La position courante doit être restaurée : la boucle appelante
-        // continue de lire les entrées séquentiellement.
-        $position = ftell($handle);
+        // continue de lire les entrées séquentiellement. Sur un flux fichier
+        // local, ftell/fseek n'échouent pas — inutile de s'en garder.
+        $position = (int) ftell($handle);
+        fseek($handle, $offset);
 
-        if (false === $position || -1 === fseek($handle, $offset)) {
-            return null;
-        }
-
-        $value = fread($handle, $count);
+        $value = (string) fread($handle, $count);
         fseek($handle, $position);
 
-        if (!is_string($value)) {
-            return null;
-        }
-
-        return rtrim($value, "\x00");
+        // Un offset hors bornes ne fait pas échouer fseek : c'est la lecture
+        // qui rend une chaîne vide.
+        return '' === $value ? null : rtrim($value, "\x00");
     }
 
     private function formatFromMake(?string $make): ?Format
@@ -211,8 +207,9 @@ final class FormatDetector implements FormatDetectorInterface
     }
 
     /**
-     * unpack() renvoie false sur données trop courtes ; on normalise en null
-     * plutôt que de laisser un false se propager silencieusement.
+     * Vérifie la longueur avant unpack() : un fread en fin de fichier rend moins
+     * d'octets que demandé, silencieusement. Une fois la longueur garantie,
+     * unpack() ne peut plus échouer.
      */
     private function unpackInt(string $format, string $bytes): ?int
     {
@@ -222,8 +219,6 @@ final class FormatDetector implements FormatDetectorInterface
             return null;
         }
 
-        $result = @unpack($format, $bytes);
-
-        return false === $result ? null : $result[1];
+        return unpack($format, $bytes)[1];
     }
 }
