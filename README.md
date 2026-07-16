@@ -33,6 +33,9 @@ RAF (Fuji) and ORF (Olympus) are planned for v2.
 
 PHP >= 8.2. That's it — the `require` section depends on nothing else.
 
+The optional Symfony bundle supports **6.4 (LTS), 7.x and 8.x**. Composer picks whichever
+matches your application; the library itself never depends on Symfony.
+
 ## Installation
 
 ```bash
@@ -96,7 +99,7 @@ Extraction is validated against synthetic fixtures in CI, and manually against r
 from the cameras listed here. RAW structure varies between camera generations — if yours
 is not listed, it may still work, but it has not been verified.
 
-_(To be filled as validation progresses.)_
+To be filled as validation progresses.
 
 ## Contributing
 

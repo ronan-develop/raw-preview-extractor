@@ -15,7 +15,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Plancher de dépendances : prouve que "php": ">=8.2" et symfony ^6.4 sont tenus
+          # Plancher : prouve que "php": ">=8.2" et symfony ^6.4 (LTS) sont tenus
           - php: '8.2'
             symfony: '6.4.*'
             flags: '--prefer-lowest'
@@ -23,6 +23,9 @@ jobs:
             symfony: '7.*'
           - php: '8.4'
             symfony: '7.*'
+          # Plafond : Symfony 8 exige PHP >= 8.4, donc pas de ligne 8.2/8.3 ici
+          - php: '8.4'
+            symfony: '8.*'
 
     env:
       SYMFONY_DEPRECATIONS_HELPER: max[direct]=0
