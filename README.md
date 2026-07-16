@@ -175,6 +175,9 @@ check in one command: see [Trying it on your own RAW files](#trying-it-on-your-o
 
 ## Contributing
 
+See [CONTRIBUTING.md](CONTRIBUTING.md) for conventions, the TDD workflow, and the binary
+parsing rules. In short:
+
 ```bash
 composer install
 vendor/bin/phpunit                            # full suite
