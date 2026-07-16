@@ -1,0 +1,51 @@
+{
+    "name": "ronanlenouvel/raw-preview-extractor",
+    "description": "Extract embedded JPEG previews from camera RAW files (CR2, CR3, NEF, ARW, DNG) in pure PHP, no external binaries.",
+    "license": "MIT",
+    "type": "library",
+    "keywords": [
+        "raw",
+        "jpeg",
+        "preview",
+        "thumbnail",
+        "cr2",
+        "cr3",
+        "nef",
+        "arw",
+        "dng",
+        "exif",
+        "tiff"
+    ],
+    "authors": [
+        {
+            "name": "Ronan Lenouvel",
+            "email": "ronan.develop@gmail.com"
+        }
+    ],
+    "require": {
+        "php": ">=8.2"
+    },
+    "require-dev": {
+        "ext-gd": "*",
+        "phpunit/phpunit": "^11.0",
+        "symfony/framework-bundle": "^6.4|^7.0",
+        "symfony/http-kernel": "^6.4|^7.0"
+    },
+    "suggest": {
+        "symfony/framework-bundle": "To auto-register the extractor as a service via the bundled RawPreviewExtractorBundle"
+    },
+    "autoload": {
+        "psr-4": {
+            "RonanLenouvel\\RawPreviewExtractor\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "RonanLenouvel\\RawPreviewExtractor\\Tests\\": "tests/"
+        }
+    },
+    "config": {
+        "sort-packages": true
+    },
+    "prefer-stable": true
+}
