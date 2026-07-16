@@ -141,6 +141,30 @@ Four generations of the same Canon 5D line — 2005 to 2016, 12 to 30 megapixels
 covered deliberately: RAW layout drifts between generations, and that drift is where
 format parsers break.
 
+### Wider audit
+
+Beyond the table above, the library is audited against the whole
+[raw.pixls.us](https://raw.pixls.us/) catalogue — 400+ camera models:
+
+```bash
+php bin/audit-cameras.php Canon 25    # 25 Canon models, spread across the range
+php bin/audit-cameras.php all 500     # everything
+```
+
+It downloads each file, extracts, verifies with `imagecreatefromstring()`, then deletes it.
+Latest Canon run — **every EOS body passed**:
+
+```text
+EOS-1D X Mark II  EOS 5D Mark IV  EOS 30D    EOS 100D   EOS 500D   EOS 1000D
+EOS R5            EOS R100        EOS RP     EOS M6     EOS Kiss M EOS Rebel T5
+PowerShot G12     PowerShot G1 X Mark II     PowerShot SX1 IS      PowerShot V1
+```
+
+The remaining failures are compacts whose files genuinely **contain no JPEG preview** —
+CHDK-generated DNGs holding an uncompressed 128×96 thumbnail, or legacy `.CRW` files
+(pre-CR2, out of scope). `PreviewNotFoundException` is the correct answer there, and the
+audit counts it as an expected outcome rather than a defect.
+
 Every preview above is checked with `imagecreatefromstring()` — not just decoded headers,
 but actually opened. Extraction takes **1–9 ms** on files up to 62 MB: the file is never
 loaded into memory, only the container structure is read before seeking to the JPEG block.
