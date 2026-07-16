@@ -205,12 +205,11 @@ final class TiffPreviewParserTest extends TestCase
         $this->parser->extract($this->tiffWith($entries, ''), Format::CR2);
     }
 
-    public function testThrowsCorruptedWhenBlockIsNotJpeg(): void
+    public function testThrowsPreviewNotFoundWhenBlockIsNotJpeg(): void
     {
-        // Le tag pointe vers des données qui ne commencent pas par FFD8 :
-        // la structure ment, le fichier est corrompu.
-        $this->expectException(CorruptedFileException::class);
-        $this->expectExceptionMessage('FFD8');
+        // Un tag qui ment sur son contenu est courant dans les RAW : ce n'est
+        // pas une corruption du fichier, c'est un candidat inexploitable.
+        $this->expectException(PreviewNotFoundException::class);
 
         $notJpeg = str_repeat("\x00", 40);
 
@@ -220,6 +219,20 @@ final class TiffPreviewParserTest extends TestCase
         ];
 
         $this->parser->extract($this->tiffWith($entries, $notJpeg), Format::CR2);
+    }
+
+    public function testFallsBackToSmallerCandidateWhenLargestIsNotJpeg(): void
+    {
+        // Cas réel du PowerShot G12 : l'IFD2 déclare Compression = 6 sur des
+        // données brutes, et c'est le plus gros bloc. Le candidat suivant —
+        // plus petit mais valide — doit prendre le relais plutôt que faire
+        // échouer l'extraction.
+        $liar = str_repeat("\x3A\x02", 400);   // gros, annoncé JPEG, n'en est pas un
+        $real = $this->jpeg(64, 48);           // plus petit, mais vrai
+
+        $path = $this->tiffWithChain([$real, $liar]);
+
+        self::assertSame($real, $this->parser->extract($path, Format::CR2)->jpegData);
     }
 
     public function testThrowsPreviewNotFoundWhenLengthIsZero(): void

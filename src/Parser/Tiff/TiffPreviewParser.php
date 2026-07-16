@@ -183,13 +183,12 @@ final class TiffPreviewParser implements PreviewParserInterface
     {
         $jpeg = $reader->readBytes($candidate['offset'], $candidate['length']);
 
-        // La structure a désigné ce bloc comme un JPEG : s'il n'en est pas un,
-        // c'est le fichier qui ment, pas la preview qui manque.
+        // Un tag qui ment sur son contenu est courant dans les RAW : le
+        // PowerShot G12 annonce Compression = 6 sur des données brutes, dans
+        // l'IFD dont le bloc est justement le plus gros. Ce n'est pas une
+        // corruption du fichier — c'est un candidat de plus à écarter.
         if (!str_starts_with($jpeg, self::JPEG_MAGIC)) {
-            throw new CorruptedFileException(sprintf(
-                'Le bloc désigné à l\'offset %d n\'est pas un JPEG (magic FFD8 absent).',
-                $candidate['offset'],
-            ));
+            return null;
         }
 
         $sof = $this->findSofSegment($jpeg);
