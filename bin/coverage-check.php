@@ -48,7 +48,26 @@ printf("Couverture de lignes : %.2f %% (%d/%d) — seuil %.2f %%\n",
     $percent, $covered, $statements, $threshold);
 
 if ($percent + 0.005 < $threshold) {
-    printf("❌ Sous le seuil de %.2f %%.\n", $threshold);
+    printf("❌ Sous le seuil de %.2f %%.\n\n", $threshold);
+
+    // Sans cette liste, il faut deviner quoi tester — ou supprimer du code au jugé.
+    foreach ($xml->xpath('//file') ?: [] as $file) {
+        $uncovered = [];
+
+        foreach ($file->line as $line) {
+            if (0 === (int) $line['count']) {
+                $uncovered[] = (int) $line['num'];
+            }
+        }
+
+        if ([] !== $uncovered) {
+            printf("  %s\n    lignes non couvertes : %s\n",
+                str_replace(getcwd() . '/', '', (string) $file['name']),
+                implode(', ', $uncovered));
+        }
+    }
+
+    echo "\n";
     exit(1);
 }
 
