@@ -91,4 +91,7 @@ jobs:
       - name: 📊 Check coverage threshold
         env:
           XDEBUG_MODE: coverage
-        run: vendor/bin/phpunit --coverage-text --coverage-clover=coverage.xml
+        run: |
+          vendor/bin/phpunit --coverage-text --coverage-clover=coverage.xml
+          # PHPUnit affiche la couverture mais n'échoue jamais sur un seuil.
+          php bin/coverage-check.php coverage.xml 95

@@ -13,6 +13,8 @@ use RonanLenouvel\RawPreviewExtractor\Format\FormatDetector;
 #[CoversClass(FormatDetector::class)]
 final class FormatDetectorTest extends TestCase
 {
+    private const TAG_MAKE = 0x010F;
+
     private FormatDetector $detector;
 
     /** @var list<string> */
@@ -113,6 +115,138 @@ final class FormatDetectorTest extends TestCase
             'ISO-BMFF avec brand isom',
             pack('N', 20) . "ftyp" . "isom" . pack('N', 512) . "isom",
         ];
+    }
+
+    public function testDetectsBigEndianTiff(): void
+    {
+        // Un TIFF big-endian (« MM ») doit être lu aussi bien qu'un little-endian :
+        // l'endianness gouverne toute lecture d'entier, y compris celle des tags.
+        $value = "NIKON\x00";
+        $entry = pack('n', self::TAG_MAKE)
+            . pack('n', 2)              // type ASCII
+            . pack('N', strlen($value))
+            . pack('N', 26);            // offset indirect
+
+        $bytes = "MM" . pack('n', 42) . pack('N', 8)
+            . pack('n', 1) . $entry . pack('N', 0) . $value;
+
+        self::assertSame(Format::NEF, $this->detector->detect($this->file($bytes)));
+    }
+
+    public function testReturnsNullWhenIfdOffsetPointsBeyondFile(): void
+    {
+        // Offset du 1er IFD au-delà de la fin : fseek réussit (PHP l'autorise),
+        // mais la lecture qui suit ne rend rien. Ne doit pas lever.
+        $bytes = "II" . pack('v', 42) . pack('V', 9999) . str_repeat("\x00", 8);
+
+        self::assertNull($this->detector->detect($this->file($bytes)));
+    }
+
+    public function testReturnsNullWhenIfdOffsetIsInsideHeader(): void
+    {
+        // Un IFD ne peut pas commencer avant l'octet 8 : il chevaucherait l'en-tête.
+        $bytes = "II" . pack('v', 42) . pack('V', 2) . str_repeat("\x00", 8);
+
+        self::assertNull($this->detector->detect($this->file($bytes)));
+    }
+
+    public function testReturnsNullWhenIfdIsTruncatedMidEntry(): void
+    {
+        // L'IFD annonce 3 entrées mais le fichier s'arrête au milieu de la première :
+        // fread rend moins que les 12 octets attendus, silencieusement.
+        $bytes = "II" . pack('v', 42) . pack('V', 8) . pack('v', 3) . "\x0F\x01\x02";
+
+        self::assertNull($this->detector->detect($this->file($bytes)));
+    }
+
+    public function testReturnsNullWhenIfdEntryCountIsZero(): void
+    {
+        $bytes = "II" . pack('v', 42) . pack('V', 8) . pack('v', 0) . pack('V', 0);
+
+        self::assertNull($this->detector->detect($this->file($bytes)));
+    }
+
+    public function testReturnsNullWhenIfdEntryCountIsAbsurd(): void
+    {
+        // 65535 entrées dans un fichier de 14 octets : fichier corrompu ou hostile.
+        // Sans plafond, on bouclerait 65535 fois sur des fread vides.
+        $bytes = "II" . pack('v', 42) . pack('V', 8) . pack('v', 65535) . pack('V', 0);
+
+        self::assertNull($this->detector->detect($this->file($bytes)));
+    }
+
+    public function testReturnsNullWhenMakeOffsetPointsBeyondFile(): void
+    {
+        // Le tag Make existe, mais son offset indirect pointe hors du fichier.
+        $entry = pack('v', self::TAG_MAKE)
+            . pack('v', 2)
+            . pack('V', 6)
+            . pack('V', 9999);          // offset hors bornes
+
+        $bytes = "II" . pack('v', 42) . pack('V', 8)
+            . pack('v', 1) . $entry . pack('V', 0);
+
+        self::assertNull($this->detector->detect($this->file($bytes)));
+    }
+
+    public function testReturnsNullWhenMakeCountIsAbsurd(): void
+    {
+        // Un nom de fabricant de 100 000 octets n'existe pas : refuser d'allouer.
+        $entry = pack('v', self::TAG_MAKE)
+            . pack('v', 2)
+            . pack('V', 100000)
+            . pack('V', 26);
+
+        $bytes = "II" . pack('v', 42) . pack('V', 8)
+            . pack('v', 1) . $entry . pack('V', 0) . "NIKON\x00";
+
+        self::assertNull($this->detector->detect($this->file($bytes)));
+    }
+
+    public function testReturnsNullForUnknownMake(): void
+    {
+        // TIFF valide, tag Make présent, mais fabricant non supporté :
+        // ce n'est pas un RAW que ce package sait traiter.
+        self::assertNull($this->detector->detect($this->file($this->tiffWithMake('PENTAX'))));
+    }
+
+    public function testDetectsCanonMakeAsCr2(): void
+    {
+        // Un TIFF Canon sans la signature « CR » (CR2 ancien ou variante) :
+        // le tag Make prend le relais.
+        self::assertSame(
+            Format::CR2,
+            $this->detector->detect($this->file($this->tiffWithMake('Canon'))),
+        );
+    }
+
+    public function testIgnoresUnrelatedTagsBeforeMake(): void
+    {
+        // Le tag discriminant n'est pas forcément le premier : la boucle doit
+        // traverser les entrées non pertinentes sans s'arrêter.
+        $value = "SONY\x00";
+
+        $filler = pack('v', 0x0100) . pack('v', 3) . pack('V', 1) . pack('V', 4000);
+        $make = pack('v', self::TAG_MAKE) . pack('v', 2) . pack('V', strlen($value)) . pack('V', 38);
+
+        $bytes = "II" . pack('v', 42) . pack('V', 8)
+            . pack('v', 2) . $filler . $make . pack('V', 0) . $value;
+
+        self::assertSame(Format::ARW, $this->detector->detect($this->file($bytes)));
+    }
+
+    public function testReturnsNullForDirectory(): void
+    {
+        // fopen sur un répertoire réussit sur certains systèmes, mais fread échoue.
+        self::assertNull($this->detector->detect(sys_get_temp_dir()));
+    }
+
+    public function testReturnsNullForFtypBoxTooShortForBrand(): void
+    {
+        // Boîte ftyp annoncée mais tronquée avant le brand : moins de 12 octets.
+        $bytes = pack('N', 16) . "ftyp" . "cr";
+
+        self::assertNull($this->detector->detect($this->file($bytes)));
     }
 
     public function testReturnsNullForMissingFile(): void
