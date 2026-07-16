@@ -5,8 +5,9 @@ Extract the JPEG preview embedded in camera RAW files — **pure PHP, no externa
 [![CI](https://github.com/ronan-develop/raw-preview-extractor/actions/workflows/ci.yml/badge.svg)](https://github.com/ronan-develop/raw-preview-extractor/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-> **Status: work in progress.** The public API below is the target design; nothing is
-> released yet. Do not use in production until `1.0.0` is tagged.
+> **Status: feature-complete, not yet released.** All five formats extract; the API below
+> is implemented and covered by tests. Waiting on validation against real camera files
+> before tagging `1.0.0`.
 
 ## Why
 
@@ -19,13 +20,16 @@ demosaicing, no sensor data, no dependencies: just byte reading.
 
 ## Supported formats
 
-| Format | Container | Status |
-| --- | --- | --- |
-| CR2 (Canon) | TIFF 6.0 | planned |
-| CR3 (Canon) | ISO-BMFF | planned |
-| NEF (Nikon) | TIFF 6.0 | planned |
-| ARW (Sony) | TIFF 6.0 | planned |
-| DNG (Adobe) | TIFF 6.0 | planned |
+| Format      | Container | Detected by            |
+|-------------|-----------|------------------------|
+| CR2 (Canon) | TIFF 6.0  | `CR` signature         |
+| CR3 (Canon) | ISO-BMFF  | `ftyp` + `crx` brand   |
+| NEF (Nikon) | TIFF 6.0  | `Make` tag             |
+| ARW (Sony)  | TIFF 6.0  | `Make` tag             |
+| DNG (Adobe) | TIFF 6.0  | `DNGVersion` tag       |
+
+Detection reads the file's **binary signature**, never its extension: a `.cr2` renamed to
+`.jpg` is still detected as a CR2, and a `.cr2` that isn't one is rejected.
 
 RAF (Fuji) and ORF (Olympus) are planned for v2.
 
@@ -46,6 +50,9 @@ composer require ronanlenouvel/raw-preview-extractor
 
 ```php
 use RonanLenouvel\RawPreviewExtractor\Exception\RawPreviewExtractorException;
+use RonanLenouvel\RawPreviewExtractor\RawPreviewExtractor;
+
+$extractor = RawPreviewExtractor::createDefault();
 
 try {
     $preview = $extractor->extract('/path/to/photo.cr2');
@@ -72,11 +79,11 @@ if ($extractor->supports($path)) {
 
 All of them implement `RawPreviewExtractorException`:
 
-| Exception | Meaning |
-| --- | --- |
-| `UnsupportedFormatException` | not a supported RAW file |
-| `PreviewNotFoundException` | valid file, but no embedded JPEG preview |
-| `CorruptedFileException` | unreadable or structurally invalid file |
+| Exception                    | Meaning                                  |
+|------------------------------|------------------------------------------|
+| `UnsupportedFormatException` | not a supported RAW file                 |
+| `PreviewNotFoundException`   | valid file, but no embedded JPEG preview |
+| `CorruptedFileException`     | unreadable or structurally invalid file  |
 
 ## Symfony integration (optional)
 
@@ -95,22 +102,32 @@ return [
 
 ## Tested cameras
 
-Extraction is validated against synthetic fixtures in CI, and manually against real files
-from the cameras listed here. RAW structure varies between camera generations — if yours
-is not listed, it may still work, but it has not been verified.
+**None yet** — this is the honest answer, and the reason `1.0.0` is not tagged.
 
-To be filled as validation progresses.
+Every format is covered end to end in CI against **synthetic files**: byte sequences built
+in memory, carrying a real JPEG that is read back with `getimagesizefromstring()` as an
+independent check. That proves the parsing is correct. It does not prove that a Canon 5D
+Mark IV lays out its IFDs the way this library expects.
+
+RAW structure varies between camera generations, and CR3 has no public specification.
+Validation against real files is in progress; verified models will be listed here.
+
+If your camera is not listed, the library may well work — it just has not been verified.
 
 ## Contributing
 
 ```bash
 composer install
-vendor/bin/phpunit                     # full suite
-vendor/bin/phpunit --testsuite unit    # fast, no fixtures
+vendor/bin/phpunit                            # full suite
+vendor/bin/phpunit --testsuite unit           # fast: forged bytes, no files
+vendor/bin/phpunit --testsuite integration    # public API end to end
 ```
 
-The test suite runs without any RAW file: tests build byte sequences in memory. No camera
-files are committed to this repository.
+The suite runs on a clean machine with **no RAW file whatsoever**: tests build byte
+sequences in memory. No camera files are committed to this repository — a RAW carries EXIF
+data (serial number, sometimes GPS), and a committed binary stays in git history forever.
+
+Real files used for manual validation live in `tests/Fixtures/local/`, which is git-ignored.
 
 ## License
 
