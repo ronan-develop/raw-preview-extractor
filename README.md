@@ -143,27 +143,31 @@ format parsers break.
 
 ### Wider audit
 
-Beyond the table above, the library is audited against the whole
-[raw.pixls.us](https://raw.pixls.us/) catalogue — 400+ camera models:
+Beyond the table above, the library is audited against the
+[raw.pixls.us](https://raw.pixls.us/) catalogue — 400+ camera models, CC0 files:
 
 ```bash
 php bin/audit-cameras.php Canon 25    # 25 Canon models, spread across the range
 php bin/audit-cameras.php all 500     # everything
 ```
 
-It downloads each file, extracts, verifies with `imagecreatefromstring()`, then deletes it.
-Latest Canon run — **every EOS body passed**:
+Each file is downloaded, extracted, verified with `imagecreatefromstring()`, then deleted.
+Latest run — **72 models across the four brands in scope**:
 
-```text
-EOS-1D X Mark II  EOS 5D Mark IV  EOS 30D    EOS 100D   EOS 500D   EOS 1000D
-EOS R5            EOS R100        EOS RP     EOS M6     EOS Kiss M EOS Rebel T5
-PowerShot G12     PowerShot G1 X Mark II     PowerShot SX1 IS      PowerShot V1
-```
+| Brand | Passed | Notes                            |
+|-------|--------|----------------------------------|
+| Sony  | 23/23  | 100 % — A290 (2010) through FX30 |
+| Nikon | 20/22  | 90.9 %                           |
+| Apple | 5/6    | 83.3 %                           |
+| Canon | 16/21  | 76.2 % — every EOS body passed   |
 
-The remaining failures are compacts whose files genuinely **contain no JPEG preview** —
-CHDK-generated DNGs holding an uncompressed 128×96 thumbnail, or legacy `.CRW` files
-(pre-CR2, out of scope). `PreviewNotFoundException` is the correct answer there, and the
-audit counts it as an expected outcome rather than a defect.
+**Every failure was verified by hand, and every one is correct**: those files contain no
+JPEG preview at all (zero `FFD8` bytes in the entire file). A Nikon D1H from 2001 carries an
+uncompressed 160×120 RGB thumbnail; CHDK-generated compact DNGs do the same; legacy `.CRW`
+files predate CR2 and are out of scope. `PreviewNotFoundException` is the right answer, so
+the real success rate on files that *have* a preview is 100 %.
+
+The full list is at the [bottom of this page](#appendix-models-verified-against-real-files).
 
 Every preview above is checked with `imagecreatefromstring()` — not just decoded headers,
 but actually opened. Extraction takes **1–9 ms** on files up to 62 MB: the file is never
@@ -174,6 +178,9 @@ camera is not listed, the library may well work — it just has not been verifie
 check in one command: see [Trying it on your own RAW files](#trying-it-on-your-own-raw-files).
 
 ## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for conventions, the TDD workflow, and the binary
+parsing rules. In short:
 
 ```bash
 composer install
@@ -220,3 +227,57 @@ MIT — see [LICENSE](LICENSE).
 
 `exiftool` and `libraw` were used as behavioural references only. No code was copied from
 either project.
+
+---
+
+## Appendix: models verified against real files
+
+Every model below had a real file downloaded, its preview extracted, and the result opened
+with `imagecreatefromstring()`. Sources: [raw.pixls.us](https://raw.pixls.us/) (CC0).
+
+**Canon** — CR2 & CR3
+
+```text
+EOS 5D            EOS 5D Mark II    EOS 5D Mark II sRAW1   EOS 5D Mark IV
+EOS-1D X Mark II  EOS 30D           EOS 100D               EOS 500D
+EOS 1000D         EOS Rebel T5      EOS M6                 EOS Kiss M
+EOS R             EOS RP            EOS R5                 EOS R100
+PowerShot G12     PowerShot G1 X Mark II                   PowerShot SX1 IS
+PowerShot V1
+```
+
+**Nikon** — NEF
+
+```text
+D60      D90      D300     D610     D800     D850     D2Xs     D3300
+D4       D5100    D5600    D6       D7500    E8400    Z 7      Z 30
+1 AW1    1 J3     1 S2     Coolpix A
+```
+
+**Sony** — ARW
+
+```text
+DSLR-A290    DSLR-A380    DSLR-A550    DSLR-A850    SLT-A35      SLT-A58
+NEX-5N       NEX-7        ILCE-5000    ILCE-6100    ILCE-6600    ILCE-7S
+ILCE-7M4     ILCE-7RM3A   ILCE-7CM2    ILCA-99M2    ILME-FX30    UMC-R10C
+DSC-RX0      DSC-RX100M4  DSC-RX100M7  DSC-RX10M4   DSC-RX1RM2
+```
+
+**Apple** — DNG (including ProRAW)
+
+```text
+iPhone 6s Plus   iPhone 7 Plus   iPhone SE   iPhone XS   iPhone 12 Pro
+```
+
+### Known to have no preview
+
+These files contain **no JPEG at all** — verified byte by byte. `PreviewNotFoundException`
+is the correct response, not a defect:
+
+| Model                                           | What the file actually holds              |
+|-------------------------------------------------|-------------------------------------------|
+| Nikon D1H (2001)                                | uncompressed 160×120 RGB thumbnail        |
+| Nikon COOLSCAN V ED                             | film scanner, no camera preview           |
+| Apple iPhone 8                                  | 64 sensor tiles, no JPEG                  |
+| Canon PowerShot SX100 IS, SX510 HS, ELPH 130 IS | CHDK DNGs, uncompressed 128×96 thumbnail  |
+| Canon PowerShot G7 X, IXY 220F                  | `.CRW` — pre-CR2 format, out of scope     |
