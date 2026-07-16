@@ -206,16 +206,50 @@ final class TiffReaderTest extends TestCase
         self::assertCount(64, $this->reader($bytes)->readIfdOffsets());
     }
 
-    public function testThrowsWhenValueLengthIsAbsurd(): void
+    public function testThrowsWhenValueLengthExceedsFileSize(): void
     {
         $this->expectException(CorruptedFileException::class);
-        $this->expectExceptionMessage('absurde');
 
         // count = 100 000 × 4 octets (LONG) = 400 Ko annoncés dans un fichier
-        // de 26 octets : refuser avant d'allouer.
+        // de 26 octets : une valeur ne peut pas déborder du fichier qui la porte.
         $this->reader($this->tiff('II', [
             [TiffTag::SubIfds->value, 4, 100000, pack('V', 26)],
         ]))->readIfd(8);
+    }
+
+    public function testDoesNotResolveOversizedValuesButKeepsTheEntry(): void
+    {
+        // Le MakerNote d'un CR2 pèse couramment plus de 64 Ko. Le package ne
+        // l'exploite pas : le lire serait du gaspillage, et le rejeter ferait
+        // échouer un fichier parfaitement valide — c'est ce qui arrivait au
+        // Canon 5D de 2005.
+        $big = str_repeat("\xAB", 80000);
+        $offset = 8 + 2 + 12 + 4;
+
+        $bytes = $this->tiff('II', [
+            [0x927C, 7, strlen($big), pack('V', $offset)],   // MakerNote, UNDEFINED
+        ]) . $big;
+
+        $entries = $this->reader($bytes)->readIfd(8);
+
+        // L'entrée existe et reste traversable ; seule sa valeur n'est pas résolue.
+        self::assertCount(1, $entries);
+        self::assertSame(0x927C, $entries[0]->tag);
+        self::assertSame(80000, $entries[0]->count);
+        self::assertSame([], $entries[0]->values);
+    }
+
+    public function testStillResolvesLargeValuesOfExploitedTags(): void
+    {
+        // Contre-épreuve : un tag utile reste résolu même avec plusieurs valeurs.
+        $payload = pack('V', 111) . pack('V', 222) . pack('V', 333);
+        $offset = 8 + 2 + 12 + 4;
+
+        $bytes = $this->tiff('II', [
+            [TiffTag::SubIfds->value, 4, 3, pack('V', $offset)],
+        ]) . $payload;
+
+        self::assertSame([111, 222, 333], $this->reader($bytes)->readIfd(8)[0]->values);
     }
 
     public function testThrowsWhenIfdOffsetIsOutOfBounds(): void

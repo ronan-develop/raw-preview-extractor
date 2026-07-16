@@ -29,8 +29,18 @@ final class TiffReader
     /** Garde-fou contre une chaîne d'IFD artificiellement longue. */
     private const MAX_IFD_CHAIN = 64;
 
-    /** Aucune valeur de tag exploitée ici n'approche cette taille. */
-    private const MAX_VALUE_LENGTH = 65536;
+    /**
+     * Au-delà, une valeur n'est pas résolue — l'entrée reste lisible.
+     *
+     * Aucun tag exploité par ce package n'approche cette taille : ce sont des
+     * offsets, des tailles, des dimensions, un nom de fabricant. Les gros blocs
+     * sont des métadonnées propriétaires (`MakerNote` pèse couramment 75 Ko dans
+     * un CR2) que l'on traverse sans jamais les lire.
+     *
+     * Ne pas les résoudre évite deux choses : gaspiller la lecture, et rejeter
+     * un fichier parfaitement valide — ce qui arrivait au Canon 5D de 2005.
+     */
+    private const MAX_RESOLVED_VALUE_LENGTH = 65536;
 
     /** Taille en octets de chaque type TIFF 6.0, indexée par code de type. */
     private const TYPE_SIZES = [
@@ -183,12 +193,23 @@ final class TiffReader
 
         $length = $size * $count;
 
-        if ($length > self::MAX_VALUE_LENGTH) {
+        // Une valeur ne peut pas être plus grande que le fichier qui la porte :
+        // c'est une taille absurde, donc une structure qui ment.
+        if ($length > $this->fileSize) {
             throw new CorruptedFileException(sprintf(
-                'Entrée 0x%04X : %d octets de données annoncés, taille absurde.',
+                'Entrée 0x%04X : %d octets annoncés, plus que le fichier entier (%d).',
                 $tag,
                 $length,
+                $this->fileSize,
             ));
+        }
+
+        // Trop gros pour être un tag que ce package exploite : on garde l'entrée
+        // — elle reste traversable — mais on ne lit pas sa valeur. Un MakerNote
+        // de 75 Ko n'est pas une corruption, c'est une métadonnée qui ne nous
+        // regarde pas.
+        if ($length > self::MAX_RESOLVED_VALUE_LENGTH) {
+            return new IfdEntry($tag, $type, $count);
         }
 
         // Règle des 4 octets : au-delà, le champ porte un offset absolu et non
