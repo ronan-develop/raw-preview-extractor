@@ -125,14 +125,21 @@ Verified against real files from [raw.pixls.us](https://raw.pixls.us/) (CC0):
 
 All five formats are verified against real camera files:
 
-| Camera             | Format | File  | Preview extracted     |
-|--------------------|--------|-------|-----------------------|
-| Canon EOS 5D Mk IV | CR2    | 62 MB | 6720×4480 — 2047 KB   |
-| Canon EOS R        | CR3    | 30 MB | 1620×1080 — 228 KB    |
-| Canon EOS RP       | CR3    | 7 MB  | 1620×1080 — 328 KB    |
-| Nikon D750         | NEF    | 25 MB | 6016×4016 — 952 KB    |
-| Sony α7 (ILCE-7)   | ARW    | 24 MB | 1616×1080 — 460 KB    |
-| Apple iPhone 12 Pro| DNG    | 29 MB | 4032×3024 — 5239 KB   |
+| Camera                 | Year | Format | File  | Preview extracted   |
+|------------------------|------|--------|-------|---------------------|
+| Canon EOS 5D           | 2005 | CR2    | 13 MB | 2496×1664 — 1656 KB |
+| Canon EOS 5D Mark II   | 2008 | CR2    | 27 MB | 5616×3744 — 1980 KB |
+| Canon 5D Mark II sRAW1 | 2008 | CR2    | 15 MB | 5616×3744 — 1973 KB |
+| Canon EOS 5D Mark IV   | 2016 | CR2    | 62 MB | 6720×4480 — 2047 KB |
+| Canon EOS R            | 2018 | CR3    | 30 MB | 1620×1080 — 228 KB  |
+| Canon EOS RP           | 2019 | CR3    | 7 MB  | 1620×1080 — 328 KB  |
+| Nikon D750             | 2014 | NEF    | 25 MB | 6016×4016 — 952 KB  |
+| Sony α7 (ILCE-7)       | 2013 | ARW    | 24 MB | 1616×1080 — 460 KB  |
+| Apple iPhone 12 Pro    | 2020 | DNG    | 29 MB | 4032×3024 — 5239 KB |
+
+Four generations of the same Canon 5D line — 2005 to 2016, 12 to 30 megapixels — are
+covered deliberately: RAW layout drifts between generations, and that drift is where
+format parsers break.
 
 Every preview above is checked with `imagecreatefromstring()` — not just decoded headers,
 but actually opened. Extraction takes **1–9 ms** on files up to 62 MB: the file is never
