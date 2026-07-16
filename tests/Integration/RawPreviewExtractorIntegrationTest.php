@@ -168,16 +168,24 @@ final class RawPreviewExtractorIntegrationTest extends TestCase
         return 'II' . pack('v', 42) . pack('V', 8) . $ifd . $jpeg;
     }
 
-    /** CR3 : ISO-BMFF, ftyp « crx », preview dans PRVW sous l'UUID Canon. */
+    /**
+     * CR3 reproduisant la structure **réelle**, vérifiée sur EOS R et EOS RP :
+     * PRVW vit dans sa propre boîte uuid à la racine, précédé de 8 octets
+     * propriétaires — pas sous l'UUID Canon, qui ne porte que THMB.
+     */
     private static function cr3(string $jpeg): string
     {
-        $uuid = (string) hex2bin('85c0b687820f11e08111f4ce462b6a48');
+        $canonUuid = (string) hex2bin('85c0b687820f11e08111f4ce462b6a48');
+        $previewUuid = (string) hex2bin('eaf42b5e1c984b88b9fbb7dc406e4d16');
 
-        // En-tête propriétaire avant le JPEG : sa taille varie selon les modèles.
+        // En-tête propriétaire de PRVW avant le JPEG : taille variable selon les modèles.
         $prvw = self::box('PRVW', str_repeat("\x00", 12) . $jpeg);
 
         return self::box('ftyp', 'crx isom')
-            . self::box('moov', self::box('uuid', $uuid . $prvw));
+            . self::box('moov', self::box('uuid', $canonUuid . self::box('CMT1', 'x')))
+            // 8 octets propriétaires entre l'UUID et la première boîte.
+            . self::box('uuid', $previewUuid . str_repeat("\x00", 8) . $prvw)
+            . self::box('mdat', str_repeat("\x00", 16));
     }
 
     private static function jpegIfd(int $jpegOffset, int $jpegLength): string

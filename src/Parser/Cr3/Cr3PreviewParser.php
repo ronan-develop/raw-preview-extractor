@@ -13,8 +13,9 @@ use RonanLenouvel\RawPreviewExtractor\Parser\PreviewParserInterface;
 /**
  * Extrait la preview JPEG d'un CR3 (Canon RAW v3, conteneur ISO-BMFF).
  *
- * La preview vit dans la boîte `PRVW` de l'UUID Canon, sous `moov`. `THMB` porte
- * une vignette plus petite, utilisée en repli.
+ * La preview vit dans la boîte `PRVW`, sous une boîte `uuid` dédiée **à la racine**
+ * du fichier. `THMB` porte une vignette bien plus petite, sous l'UUID Canon, et
+ * sert de repli.
  *
  * **Le CR3 n'a pas de spécification publique** : sa structure vient de
  * rétro-ingénierie communautaire et peut varier selon les modèles. Le code est
@@ -27,32 +28,48 @@ use RonanLenouvel\RawPreviewExtractor\Parser\PreviewParserInterface;
 final class Cr3PreviewParser implements PreviewParserInterface
 {
     /**
-     * UUID de la boîte Canon portant les métadonnées (PRVW, THMB, CMT1, CMT2).
+     * Emplacements des previews, par ordre de préférence.
      *
-     * Plusieurs boîtes `uuid` coexistent dans un CR3 : seule celle-ci fait foi.
+     * `PRVW` et `THMB` ne vivent **ni sous le même UUID, ni au même niveau** —
+     * structure vérifiée sur Canon EOS R et EOS RP :
+     *
+     * ```
+     * ftyp
+     * moov
+     *   └── uuid 85c0b687…   → CMT1, CMT2, THMB   (vignette ~15 Ko)
+     * uuid eaf42b5e…          → PRVW              (preview ~250 Ko)
+     * mdat
+     * ```
+     *
+     * Chercher les deux sous l'UUID Canon ne trouve que la vignette.
+     *
+     * @var list<array{uuid: string, box: string}>
      */
-    private const CANON_UUID = '85c0b687820f11e08111f4ce462b6a48';
-
-    /** Par ordre de préférence : la vraie preview, puis la vignette en repli. */
-    private const PREVIEW_BOXES = ['PRVW', 'THMB'];
+    private const PREVIEW_LOCATIONS = [
+        // La vraie preview, dans sa propre boîte uuid à la racine.
+        ['uuid' => 'eaf42b5e1c984b88b9fbb7dc406e4d16', 'box' => 'PRVW'],
+        // Repli : la vignette de l'UUID Canon, sous moov.
+        ['uuid' => '85c0b687820f11e08111f4ce462b6a48', 'box' => 'THMB'],
+    ];
 
     /** Marqueur de début de tout JPEG (SOI). */
     private const JPEG_MAGIC = "\xFF\xD8";
 
+    /** Longueur de l'UUID qui suit le type d'une boîte `uuid`. */
+    private const UUID_LENGTH = 16;
+
     public function extract(string $path, Format $format): ExtractedPreview
     {
         $reader = new IsoBmffBoxReader($path);
-        $canon = $reader->findUuid((string) hex2bin(self::CANON_UUID));
 
-        if (null === $canon) {
-            throw new PreviewNotFoundException(sprintf(
-                'Aucune preview : la boîte UUID Canon est absente de %s.',
-                basename($path),
-            ));
-        }
+        foreach (self::PREVIEW_LOCATIONS as $location) {
+            $container = $reader->findUuid((string) hex2bin($location['uuid']));
 
-        foreach (self::PREVIEW_BOXES as $type) {
-            $jpeg = $this->jpegFromBox($reader, $canon, $type);
+            if (null === $container) {
+                continue;
+            }
+
+            $jpeg = $this->jpegFromBox($reader, $container, $location['box']);
 
             if (null !== $jpeg) {
                 [$width, $height] = $this->readJpegDimensions($jpeg);
@@ -72,9 +89,12 @@ final class Cr3PreviewParser implements PreviewParserInterface
      *
      * @throws CorruptedFileException si la structure est invalide
      */
-    private function jpegFromBox(IsoBmffBoxReader $reader, Box $canon, string $type): ?string
+    private function jpegFromBox(IsoBmffBoxReader $reader, Box $container, string $type): ?string
     {
-        $box = $this->findWithin($reader, $canon, $type);
+        // Certains conteneurs uuid commencent par des octets propriétaires :
+        // le parcours normal échoue alors, on retombe sur une recherche par type.
+        $box = $this->findWithin($reader, $container, $type)
+            ?? $this->findByScanning($reader, $container, $type);
 
         if (null === $box) {
             return null;
@@ -92,7 +112,7 @@ final class Cr3PreviewParser implements PreviewParserInterface
     }
 
     /**
-     * Cherche une boîte parmi les filles directes de l'UUID Canon.
+     * Cherche une boîte parmi les filles directes d'un conteneur uuid.
      *
      * On ne cherche pas dans tout le fichier : une boîte `PRVW` ailleurs
      * n'est pas la preview du CR3, et s'y fier reviendrait à faire confiance
@@ -100,15 +120,47 @@ final class Cr3PreviewParser implements PreviewParserInterface
      *
      * @throws CorruptedFileException si la structure est invalide
      */
-    private function findWithin(IsoBmffBoxReader $reader, Box $canon, string $type): ?Box
+    private function findWithin(IsoBmffBoxReader $reader, Box $container, string $type): ?Box
     {
-        foreach ($reader->childBoxes($canon) as $box) {
+        foreach ($reader->childBoxes($container) as $box) {
             if ($box->type === $type) {
                 return $box;
             }
         }
 
         return null;
+    }
+
+    /**
+     * Cherche une boîte dans le contenu brut d'un conteneur, sans supposer que
+     * celui-ci commence par une boîte.
+     *
+     * La boîte `uuid` qui porte `PRVW` insère **8 octets propriétaires** entre
+     * l'UUID et la première boîte — vérifié sur EOS R et EOS RP. Sa taille n'est
+     * documentée nulle part, et rien ne garantit qu'elle soit la même partout.
+     * On localise donc le type recherché dans le contenu, plutôt que de coder un
+     * décalage en dur.
+     *
+     * @throws CorruptedFileException si la structure est invalide
+     */
+    private function findByScanning(IsoBmffBoxReader $reader, Box $container, string $type): ?Box
+    {
+        $payload = $reader->readPayload($container);
+        $position = strpos($payload, $type, self::UUID_LENGTH);
+
+        // Le type est précédé des 4 octets de taille : la boîte commence là.
+        if (false === $position || $position < 4) {
+            return null;
+        }
+
+        $boxStart = $container->payloadOffset + $position - 4;
+        $size = (int) unpack('N', substr($payload, $position - 4, 4))[1];
+
+        if ($size < 8 || $boxStart + $size > $container->payloadOffset + $container->payloadLength) {
+            return null;
+        }
+
+        return new Box($type, $boxStart, $boxStart + 8, $size - 8);
     }
 
     /**

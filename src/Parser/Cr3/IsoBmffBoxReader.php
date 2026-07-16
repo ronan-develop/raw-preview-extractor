@@ -319,13 +319,29 @@ final class IsoBmffBoxReader
      */
     private function childrenOf(Box $box): array
     {
-        // Une boîte uuid porte 16 octets d'UUID avant ses filles.
+        // Une boîte uuid porte 16 octets d'UUID avant son contenu.
         $start = 'uuid' === $box->type
             ? $box->payloadOffset + self::UUID_LENGTH
             : $box->payloadOffset;
 
         $end = $box->payloadOffset + $box->payloadLength;
 
-        return $start < $end ? $this->readBoxesIn($start, $end) : [];
+        if ($start >= $end) {
+            return [];
+        }
+
+        try {
+            return $this->readBoxesIn($start, $end);
+        } catch (CorruptedFileException) {
+            // Descendre dans un conteneur est spéculatif : toutes les boîtes
+            // `uuid` ne contiennent pas des boîtes. Celle qui porte PRVW dans un
+            // CR3 commence par un en-tête propriétaire, dont les octets lus
+            // comme un en-tête donnent une taille absurde.
+            //
+            // Une boîte sans enfants lisibles n'a pas d'enfants — ce n'est pas
+            // une corruption du fichier. Les lectures non spéculatives
+            // (readBoxes, readPayload, readBytes) restent strictes.
+            return [];
+        }
     }
 }
