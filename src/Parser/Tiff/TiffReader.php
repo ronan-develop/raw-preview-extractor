@@ -97,22 +97,6 @@ final class TiffReader
     }
 
     /**
-     * Offset du premier IFD, tel qu'annoncé par l'en-tête.
-     */
-    public function firstIfdOffset(): int
-    {
-        return $this->firstIfdOffset;
-    }
-
-    /**
-     * Taille réelle du fichier, en octets.
-     */
-    public function fileSize(): int
-    {
-        return $this->fileSize;
-    }
-
-    /**
      * Parcourt la chaîne d'IFD et renvoie les offsets rencontrés, dans l'ordre.
      *
      * Un IFD déjà visité clôt le parcours : c'est le garde-fou anti-boucle. Un

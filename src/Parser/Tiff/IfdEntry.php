@@ -49,22 +49,6 @@ final readonly class IfdEntry
     }
 
     /**
-     * Taille totale des données de cette entrée, en octets.
-     */
-    public function byteLength(): int
-    {
-        return $this->typeSize() * $this->count;
-    }
-
-    /**
-     * Les données tiennent-elles dans les 4 octets du champ ?
-     */
-    public function isInline(): bool
-    {
-        return $this->byteLength() <= 4;
-    }
-
-    /**
      * Première valeur de l'entrée, ou null si le type est inconnu.
      *
      * Un type inconnu n'est pas une corruption : l'entrée reste lisible, seule
@@ -120,7 +104,7 @@ final readonly class IfdEntry
      */
     public function rawBytes(TiffReader $reader): string
     {
-        $length = $this->byteLength();
+        $length = (self::TYPE_SIZES[$this->type] ?? 0) * $this->count;
 
         if ($length <= 0) {
             throw new CorruptedFileException(
@@ -128,15 +112,11 @@ final readonly class IfdEntry
             );
         }
 
-        if ($this->isInline()) {
+        // Règle des 4 octets : au-delà, le champ porte un offset, pas la valeur.
+        if ($length <= 4) {
             return substr($this->valueOrOffset, 0, $length);
         }
 
         return $reader->readBytes($reader->unpackLong($this->valueOrOffset), $length);
-    }
-
-    private function typeSize(): int
-    {
-        return self::TYPE_SIZES[$this->type] ?? 0;
     }
 }
