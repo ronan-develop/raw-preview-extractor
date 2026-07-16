@@ -112,17 +112,19 @@ final class IsoBmffBoxReader
      */
     public function findUuid(string $uuid): ?Box
     {
-        foreach ($this->readBoxes() as $box) {
-            if ('uuid' !== $box->type || $box->payloadLength < self::UUID_LENGTH) {
-                continue;
-            }
+        return $this->findUuidIn($this->readBoxes(), $uuid, 0);
+    }
 
-            if ($uuid === $this->readBytes($box->payloadOffset, self::UUID_LENGTH)) {
-                return $box;
-            }
-        }
-
-        return null;
+    /**
+     * Inventorie les boîtes filles d'un conteneur.
+     *
+     * @return list<Box>
+     *
+     * @throws CorruptedFileException si la structure est invalide
+     */
+    public function childBoxes(Box $box): array
+    {
+        return $this->childrenOf($box);
     }
 
     /**
@@ -238,6 +240,44 @@ final class IsoBmffBoxReader
         }
 
         return new Box($type, $offset, $offset + $headerLength, $size - $headerLength);
+    }
+
+    /**
+     * Cherche récursivement une boîte `uuid` portant l'UUID donné.
+     *
+     * Dans un CR3 réel, l'UUID Canon vit sous `moov` et non à la racine : une
+     * recherche limitée au premier niveau ne le trouverait jamais.
+     *
+     * @param list<Box> $boxes
+     *
+     * @throws CorruptedFileException
+     */
+    private function findUuidIn(array $boxes, string $uuid, int $depth): ?Box
+    {
+        if ($depth > self::MAX_DEPTH) {
+            return null;
+        }
+
+        foreach ($boxes as $box) {
+            if ('uuid' === $box->type
+                && $box->payloadLength >= self::UUID_LENGTH
+                && $uuid === $this->readBytes($box->payloadOffset, self::UUID_LENGTH)
+            ) {
+                return $box;
+            }
+
+            if (!in_array($box->type, self::CONTAINER_TYPES, true)) {
+                continue;
+            }
+
+            $found = $this->findUuidIn($this->childrenOf($box), $uuid, $depth + 1);
+
+            if (null !== $found) {
+                return $found;
+            }
+        }
+
+        return null;
     }
 
     /**
