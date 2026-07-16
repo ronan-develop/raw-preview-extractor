@@ -23,3 +23,9 @@ clover.xml
 # Config Claude Code — locale pour le moment, non publiée.
 /.claude/
 /CLAUDE.md
+
+# Hook git de validation des messages de commit — local, non publié.
+# Activation après un clone : git config core.hooksPath .githooks
+# (le dossier n'étant pas versionné, il faut le recréer — sinon core.hooksPath
+#  pointe dans le vide et plus aucun message n'est validé, silencieusement.)
+/.githooks/
