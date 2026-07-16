@@ -235,6 +235,16 @@ final class FormatDetectorTest extends TestCase
         self::assertSame(Format::ARW, $this->detector->detect($this->file($bytes)));
     }
 
+    public function testReturnsNullWhenHeaderIsTooShortForIfdOffset(): void
+    {
+        // 9 octets : assez pour passer le contrôle des 8 octets d'en-tête, mais
+        // le champ « offset du 1er IFD » est amputé. unpackInt doit rendre null
+        // plutôt que de laisser unpack() travailler sur des octets manquants.
+        $bytes = 'II' . pack('v', 42) . "\x08\x00\x00";
+
+        self::assertNull($this->detector->detect($this->file($bytes)));
+    }
+
     public function testReturnsNullForDirectory(): void
     {
         // fopen sur un répertoire réussit sur certains systèmes, mais fread échoue.

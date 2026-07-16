@@ -164,6 +164,30 @@ final class TiffReaderTest extends TestCase
         self::assertSame([8], $reader->readIfdOffsets());
     }
 
+    public function testReadsByteTypeValues(): void
+    {
+        // Type BYTE : 4 × 1 = 4 octets, inline. C'est la forme de DNGVersion.
+        $reader = $this->reader($this->tiff('II', [
+            [TiffTag::DngVersion->value, 1, 4, "\x01\x04\x00\x00"],
+        ]));
+
+        self::assertSame([1, 4, 0, 0], $reader->readIfd(8)[0]->values);
+    }
+
+    public function testReadsRationalTypeValue(): void
+    {
+        // Type RATIONAL : 8 octets par valeur (numérateur, dénominateur), donc
+        // toujours indirect. Seul le numérateur nous intéresse.
+        $payload = pack('V', 300) . pack('V', 1);
+        $offset = 8 + 2 + 12 + 4;
+
+        $bytes = $this->tiff('II', [
+            [TiffTag::ImageWidth->value, 5, 1, pack('V', $offset)],
+        ]) . $payload;
+
+        self::assertSame(300, $this->reader($bytes)->readIfd(8)[0]->value());
+    }
+
     public function testStopsFollowingChainAfterTooManyIfds(): void
     {
         // Une chaîne de 200 IFD : aucun RAW réel n'en a plus d'une poignée.

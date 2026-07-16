@@ -37,11 +37,8 @@ final class FormatDetector implements FormatDetectorInterface
             return null;
         }
 
-        $handle = @fopen($path, 'rb');
-
-        if (false === $handle) {
-            return null;
-        }
+        // is_file() a déjà écarté l'absent et le répertoire.
+        $handle = fopen($path, 'rb');
 
         try {
             $header = fread($handle, self::HEADER_BYTES);

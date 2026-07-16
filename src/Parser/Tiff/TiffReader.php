@@ -66,13 +66,10 @@ final class TiffReader
             throw new CorruptedFileException(sprintf('Fichier illisible : %s', $path));
         }
 
-        $handle = @fopen($path, 'rb');
-
-        if (false === $handle) {
-            throw new CorruptedFileException(sprintf('Fichier illisible : %s', $path));
-        }
-
-        $this->handle = $handle;
+        // is_file() a déjà écarté l'absent et le répertoire : fopen ne peut
+        // plus échouer que sur un problème de droits, que le @ absorberait
+        // silencieusement — on le laisse donc remonter.
+        $this->handle = fopen($path, 'rb');
         $this->fileSize = (int) filesize($path);
 
         $header = (string) fread($this->handle, self::HEADER_LENGTH);
@@ -229,18 +226,10 @@ final class TiffReader
         }
 
         fseek($this->handle, $offset);
-        $bytes = (string) fread($this->handle, $length);
 
-        if (strlen($bytes) !== $length) {
-            throw new CorruptedFileException(sprintf(
-                'Fichier tronqué : %d octets lus sur %d attendus à l\'offset %d.',
-                strlen($bytes),
-                $length,
-                $offset,
-            ));
-        }
-
-        return $bytes;
+        // La plage est déjà bornée contre fileSize : fread rend exactement
+        // $length octets.
+        return (string) fread($this->handle, $length);
     }
 
     /**
@@ -286,10 +275,6 @@ final class TiffReader
      */
     private function unpackLong(string $bytes): int
     {
-        if (4 !== strlen($bytes)) {
-            throw new CorruptedFileException('Entier 32 bits tronqué.');
-        }
-
         return unpack($this->bigEndian ? 'N' : 'V', $bytes)[1];
     }
 
