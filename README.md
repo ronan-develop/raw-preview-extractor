@@ -75,6 +75,25 @@ if ($extractor->supports($path)) {
 }
 ```
 
+Processing a directory — the whole library in one loop:
+
+```php
+$extractor = RawPreviewExtractor::createDefault();
+
+foreach (glob('/photos/*') as $path) {
+    try {
+        $preview = $extractor->extract($path);
+        file_put_contents("/thumbs/" . basename($path) . '.jpg', $preview->jpegData);
+    } catch (RawPreviewExtractorException) {
+        continue;  // not a RAW, no preview, or corrupt — skip it
+    }
+}
+```
+
+Extraction is O(1) in file size: a 30 MB RAW takes the same ~2 ms as a 7 MB one, because
+the file is never loaded — only its container structure is read, then the JPEG block is
+seeked to directly.
+
 ### Exceptions
 
 All of them implement `RawPreviewExtractorException`:
@@ -130,7 +149,33 @@ The suite runs on a clean machine with **no RAW file whatsoever**: tests build b
 sequences in memory. No camera files are committed to this repository — a RAW carries EXIF
 data (serial number, sometimes GPS), and a committed binary stays in git history forever.
 
-Real files used for manual validation live in `tests/Fixtures/local/`, which is git-ignored.
+### Trying it on your own RAW files
+
+Synthetic tests prove the parsing is correct; they cannot prove your camera lays out its
+IFDs the way this library expects. To check for yourself:
+
+```bash
+mkdir -p tests/Fixtures/local        # git-ignored
+cp ~/photos/IMG_0042.CR2 tests/Fixtures/local/
+
+php bin/extract-local.php
+```
+
+```text
+FICHIER                      FORMAT       DIMENSIONS     TAILLE   DURÉE
+──────────────────────────────────────────────────────────────────────────
+✅ nikon-d750.nef            NEF           6016x4016     952 Ko     2 ms
+✅ canon-eos-r.cr3           CR3           1620x1080     228 Ko     1 ms
+```
+
+Extracted previews are written to `tests/Fixtures/local/output/` — **open them**. A JPEG
+that decodes is not necessarily the right JPEG: this library once returned a valid 160×120
+thumbnail where a 1620×1080 preview was expected, and every test was green.
+
+Neither the RAW files nor the extracted previews are committed. The script itself lives in
+`bin/`, excluded from the published archive by `.gitattributes`.
+
+Free CC0 sample files for most cameras: [raw.pixls.us](https://raw.pixls.us/).
 
 ## License
 
