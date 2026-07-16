@@ -96,7 +96,7 @@ final class TiffReaderTest extends TestCase
             [TiffTag::ImageWidth->value, 3, 1, "\x40\x06\x00\x00"],
         ]));
 
-        self::assertSame(1600, $reader->readIfd(8)[0]->value($reader));
+        self::assertSame(1600, $reader->readIfd(8)[0]->value());
     }
 
     public function testReadsInlineLongValue(): void
@@ -106,7 +106,7 @@ final class TiffReaderTest extends TestCase
             [TiffTag::JpegInterchangeFormat->value, 4, 1, pack('V', 123456)],
         ]));
 
-        self::assertSame(123456, $reader->readIfd(8)[0]->value($reader));
+        self::assertSame(123456, $reader->readIfd(8)[0]->value());
     }
 
     public function testReadsInlineValueBigEndian(): void
@@ -116,7 +116,7 @@ final class TiffReaderTest extends TestCase
             [TiffTag::ImageWidth->value, 3, 1, "\x06\x40\x00\x00"],
         ]));
 
-        self::assertSame(1600, $reader->readIfd(8)[0]->value($reader));
+        self::assertSame(1600, $reader->readIfd(8)[0]->value());
     }
 
     public function testReadsIndirectValueBeyondFourBytes(): void
@@ -130,7 +130,7 @@ final class TiffReaderTest extends TestCase
             [TiffTag::SubIfds->value, 4, 2, pack('V', $offset)],
         ]) . $payload;
 
-        self::assertSame([111, 222], $this->reader($bytes)->readIfd(8)[0]->values($this->reader($bytes)));
+        self::assertSame([111, 222], $this->reader($bytes)->readIfd(8)[0]->values);
     }
 
     public function testFollowsIfdChain(): void
@@ -209,7 +209,7 @@ final class TiffReaderTest extends TestCase
             [TiffTag::SubIfds->value, 4, 4, pack('V', 9999)],
         ]));
 
-        $reader->readIfd(8)[0]->values($reader);
+        $reader->readIfd(8)[0]->values;
     }
 
     public function testThrowsWhenValueCountWouldOverflow(): void
@@ -221,7 +221,7 @@ final class TiffReaderTest extends TestCase
             [TiffTag::ImageWidth->value, 5, 0xFFFFFF, pack('V', 26)],
         ]));
 
-        $reader->readIfd(8)[0]->values($reader);
+        $reader->readIfd(8)[0]->values;
     }
 
     public function testEmptyIfdYieldsNoEntries(): void
@@ -239,7 +239,7 @@ final class TiffReaderTest extends TestCase
             [TiffTag::ImageWidth->value, 99, 1, "\x00\x00\x00\x00"],
         ]));
 
-        self::assertNull($reader->readIfd(8)[0]->value($reader));
+        self::assertNull($reader->readIfd(8)[0]->value());
     }
 
     public function testReadsAsciiValue(): void
@@ -253,7 +253,7 @@ final class TiffReaderTest extends TestCase
 
         $reader = $this->reader($bytes);
 
-        self::assertSame('NIKON', $reader->readIfd(8)[0]->asciiValue($reader));
+        self::assertSame('NIKON', $reader->readIfd(8)[0]->ascii);
     }
 
     public function testReadsRawBytesAtOffset(): void

@@ -29,6 +29,25 @@ final class TiffReader
     /** Garde-fou contre une chaîne d'IFD artificiellement longue. */
     private const MAX_IFD_CHAIN = 64;
 
+    /** Aucune valeur de tag exploitée ici n'approche cette taille. */
+    private const MAX_VALUE_LENGTH = 65536;
+
+    /** Taille en octets de chaque type TIFF 6.0, indexée par code de type. */
+    private const TYPE_SIZES = [
+        1 => 1,   // BYTE
+        2 => 1,   // ASCII
+        3 => 2,   // SHORT
+        4 => 4,   // LONG
+        5 => 8,   // RATIONAL
+        6 => 1,   // SBYTE
+        7 => 1,   // UNDEFINED
+        8 => 2,   // SSHORT
+        9 => 4,   // SLONG
+        10 => 8,  // SRATIONAL
+        11 => 4,  // FLOAT
+        12 => 8,  // DOUBLE
+    ];
+
     /** @var resource */
     private $handle;
 
@@ -139,20 +158,56 @@ final class TiffReader
         $entries = [];
 
         for ($i = 0; $i < $count; ++$i) {
-            $bytes = $this->readBytes(
-                $offset + 2 + $i * self::ENTRY_LENGTH,
-                self::ENTRY_LENGTH,
-            );
-
-            $entries[] = new IfdEntry(
-                $this->unpackShort(substr($bytes, 0, 2)),
-                $this->unpackShort(substr($bytes, 2, 2)),
-                $this->unpackLong(substr($bytes, 4, 4)),
-                substr($bytes, 8, 4),
+            $entries[] = $this->readEntry(
+                $this->readBytes($offset + 2 + $i * self::ENTRY_LENGTH, self::ENTRY_LENGTH),
             );
         }
 
         return $entries;
+    }
+
+    /**
+     * Construit une entrée à partir de ses 12 octets, valeurs résolues comprises.
+     *
+     * @throws CorruptedFileException si un offset indirect est hors bornes
+     */
+    private function readEntry(string $bytes): IfdEntry
+    {
+        $tag = $this->unpackShort(substr($bytes, 0, 2));
+        $type = $this->unpackShort(substr($bytes, 2, 2));
+        $count = $this->unpackLong(substr($bytes, 4, 4));
+        $field = substr($bytes, 8, 4);
+
+        $size = self::TYPE_SIZES[$type] ?? null;
+
+        // Un type inconnu n'est pas une corruption : l'entrée reste lisible,
+        // seule sa valeur est indéterminable.
+        if (null === $size || $count < 1) {
+            return new IfdEntry($tag, $type, $count);
+        }
+
+        $length = $size * $count;
+
+        if ($length > self::MAX_VALUE_LENGTH) {
+            throw new CorruptedFileException(sprintf(
+                'Entrée 0x%04X : %d octets de données annoncés, taille absurde.',
+                $tag,
+                $length,
+            ));
+        }
+
+        // Règle des 4 octets : au-delà, le champ porte un offset absolu et non
+        // la valeur elle-même. S'y tromper donne des offsets qui ressemblent à
+        // des données valides.
+        $raw = $length <= 4
+            ? substr($field, 0, $length)
+            : $this->readBytes($this->unpackLong($field), $length);
+
+        if (2 === $type) {
+            return new IfdEntry($tag, $type, $count, [], rtrim($raw, "\x00"));
+        }
+
+        return new IfdEntry($tag, $type, $count, $this->unpackIntegers($raw, $size, $count));
     }
 
     /**
@@ -197,7 +252,7 @@ final class TiffReader
      *
      * @throws CorruptedFileException si les octets fournis sont insuffisants
      */
-    public function unpackIntegers(string $bytes, int $size, int $count): array
+    private function unpackIntegers(string $bytes, int $size, int $count): array
     {
         $values = [];
 
@@ -229,7 +284,7 @@ final class TiffReader
      *
      * @throws CorruptedFileException si les octets fournis ne font pas 2 octets
      */
-    public function unpackShort(string $bytes): int
+    private function unpackShort(string $bytes): int
     {
         if (2 !== strlen($bytes)) {
             throw new CorruptedFileException('Entier 16 bits tronqué.');
@@ -243,7 +298,7 @@ final class TiffReader
      *
      * @throws CorruptedFileException si les octets fournis ne font pas 4 octets
      */
-    public function unpackLong(string $bytes): int
+    private function unpackLong(string $bytes): int
     {
         if (4 !== strlen($bytes)) {
             throw new CorruptedFileException('Entier 32 bits tronqué.');
