@@ -117,12 +117,12 @@ final class TiffPreviewParserTest extends TestCase
         self::assertSame($jpeg, $this->parser->extract($path, Format::NEF)->jpegData);
     }
 
-    public function testThrowsCorruptedWhenJpegHasNoSofSegment(): void
+    public function testThrowsPreviewNotFoundWhenJpegHasNoSofSegment(): void
     {
-        // Un bloc qui commence par FFD8 mais ne porte aucun segment SOF : le
-        // magic ne suffit pas, les dimensions doivent être trouvables.
-        $this->expectException(CorruptedFileException::class);
-        $this->expectExceptionMessage('SOF');
+        // Un bloc qui commence par FFD8 mais ne porte aucun SOF n'est pas une
+        // preview exploitable — sans que le fichier soit corrompu pour autant.
+        // C'est un candidat qu'on écarte, pas une structure qui ment.
+        $this->expectException(PreviewNotFoundException::class);
 
         $fake = "\xFF\xD8" . "\xFF\xE0" . pack('n', 16) . str_repeat("\x00", 14) . "\xFF\xD9";
 
@@ -141,6 +141,43 @@ final class TiffPreviewParserTest extends TestCase
         $this->expectException(PreviewNotFoundException::class);
 
         $this->parser->extract($this->tiffWithDeepSubIfds($this->jpeg(16, 12), 8), Format::NEF);
+    }
+
+    public function testIgnoresLosslessJpegSensorData(): void
+    {
+        // Canon stocke les données du capteur d'un CR2 en JPEG *lossless*, dans
+        // un IFD qui déclare honnêtement Compression = 6. Ce bloc est le plus
+        // gros du fichier : sans contrôle du marqueur SOF, la stratégie « la
+        // plus grande preview » le choisit — et rend 28 Mo indécodables.
+        $sensor = $this->jpegWithSof("\xC3", 6880, 4544);   // SOF3 = lossless
+        $preview = $this->jpeg(64, 48);                     // SOF0 = baseline
+
+        $path = $this->tiffWithChain([$preview, $sensor]);
+
+        // La preview baseline gagne, bien qu'elle soit la plus petite.
+        self::assertSame($preview, $this->parser->extract($path, Format::CR2)->jpegData);
+    }
+
+    public function testThrowsPreviewNotFoundWhenOnlyLosslessJpegExists(): void
+    {
+        // Un fichier dont le seul bloc « JPEG » est du lossless n'a pas de
+        // preview exploitable — mieux vaut le dire que rendre l'indécodable.
+        $this->expectException(PreviewNotFoundException::class);
+
+        $sensor = $this->jpegWithSof("\xC3", 100, 100);
+
+        $this->parser->extract($this->tiffWithJpeg($sensor), Format::CR2);
+    }
+
+    public function testAcceptsProgressiveJpeg(): void
+    {
+        // SOF2 (progressif) est parfaitement décodable : ne pas le rejeter avec
+        // le lossless.
+        $progressive = $this->jpegWithSof("\xC2", 320, 240);
+
+        $preview = $this->parser->extract($this->tiffWithJpeg($progressive), Format::DNG);
+
+        self::assertSame([320, 240], [$preview->width, $preview->height]);
     }
 
     public function testThrowsPreviewNotFoundWhenNoJpegTag(): void
@@ -239,6 +276,25 @@ final class TiffPreviewParserTest extends TestCase
         imagedestroy($image);
 
         return $data;
+    }
+
+    /**
+     * Un JPEG minimal portant le marqueur SOF demandé.
+     *
+     * GD ne sait produire que du baseline (SOF0) : pour tester le rejet du
+     * lossless (SOF3), il faut forger la structure à la main.
+     */
+    private function jpegWithSof(string $marker, int $width, int $height): string
+    {
+        // SOI, APP0/JFIF, puis le segment SOF : longueur, précision, hauteur,
+        // largeur, nombre de composantes.
+        $sof = "\xFF" . $marker . pack('n', 11) . "\x08"
+            . pack('n', $height) . pack('n', $width) . "\x01\x01\x11\x00";
+
+        return "\xFF\xD8"
+            . "\xFF\xE0" . pack('n', 16) . "JFIF\x00\x01\x01\x00\x00\x01\x00\x01\x00\x00"
+            . $sof
+            . "\xFF\xD9";
     }
 
     /**

@@ -5,9 +5,9 @@ Extract the JPEG preview embedded in camera RAW files — **pure PHP, no externa
 [![CI](https://github.com/ronan-develop/raw-preview-extractor/actions/workflows/ci.yml/badge.svg)](https://github.com/ronan-develop/raw-preview-extractor/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-> **Status: feature-complete, not yet released.** All five formats extract; the API below
-> is implemented and covered by tests. Waiting on validation against real camera files
-> before tagging `1.0.0`.
+> **Status: feature-complete and validated against real camera files** (see
+> [Tested cameras](#tested-cameras)). Not yet tagged `1.0.0` — the public API is settled,
+> but a released version is a semver commitment, and more cameras are worth testing first.
 
 ## Why
 
@@ -123,18 +123,24 @@ return [
 
 Verified against real files from [raw.pixls.us](https://raw.pixls.us/) (CC0):
 
-| Camera        | Format | File   | Preview extracted    |
-|---------------|--------|--------|----------------------|
-| Nikon D750    | NEF    | 25 MB  | 6016×4016 — 952 KB   |
-| Canon EOS R   | CR3    | 30 MB  | 1620×1080 — 228 KB   |
-| Canon EOS RP  | CR3    | 7 MB   | 1620×1080 — 328 KB   |
+All five formats are verified against real camera files:
 
-Extraction takes **1–3 ms** regardless of file size: the file is never loaded into memory,
-only the container structure is read and the JPEG block is seeked to directly.
+| Camera             | Format | File  | Preview extracted     |
+|--------------------|--------|-------|-----------------------|
+| Canon EOS 5D Mk IV | CR2    | 62 MB | 6720×4480 — 2047 KB   |
+| Canon EOS R        | CR3    | 30 MB | 1620×1080 — 228 KB    |
+| Canon EOS RP       | CR3    | 7 MB  | 1620×1080 — 328 KB    |
+| Nikon D750         | NEF    | 25 MB | 6016×4016 — 952 KB    |
+| Sony α7 (ILCE-7)   | ARW    | 24 MB | 1616×1080 — 460 KB    |
+| Apple iPhone 12 Pro| DNG    | 29 MB | 4032×3024 — 5239 KB   |
 
-CR2, ARW and DNG are covered by synthetic tests but **not yet verified against real files**.
-RAW structure varies between camera generations, and CR3 has no public specification — if
-your camera is not listed, the library may well work, it just has not been verified.
+Every preview above is checked with `imagecreatefromstring()` — not just decoded headers,
+but actually opened. Extraction takes **1–9 ms** on files up to 62 MB: the file is never
+loaded into memory, only the container structure is read before seeking to the JPEG block.
+
+RAW layout varies between camera generations, and CR3 has no public specification. If your
+camera is not listed, the library may well work — it just has not been verified. You can
+check in one command: see [Trying it on your own RAW files](#trying-it-on-your-own-raw-files).
 
 ## Contributing
 

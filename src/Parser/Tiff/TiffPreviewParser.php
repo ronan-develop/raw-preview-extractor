@@ -29,6 +29,25 @@ final class TiffPreviewParser implements PreviewParserInterface
     /** Tout JPEG commence par ce marqueur (SOI). */
     private const JPEG_MAGIC = "\xFF\xD8";
 
+    /**
+     * Marqueurs SOF d'un JPEG réellement décodable.
+     *
+     * `Compression = 6` ne suffit pas à distinguer une preview des données du
+     * capteur : Canon stocke celles-ci en **JPEG lossless** dans un CR2, avec le
+     * même tag. Ces blocs sont les plus gros du fichier et gagneraient donc la
+     * comparaison par taille — pour rendre 28 Mo qu'aucun décodeur ne lit.
+     *
+     * Vérifié sur six appareils : les previews utilisent toutes SOF0 ; seul le
+     * capteur d'un CR2 utilise SOF3.
+     *
+     * @var list<int>
+     */
+    private const DECODABLE_SOF_MARKERS = [
+        0xC0,  // SOF0 — baseline, le cas de toutes les previews observées
+        0xC1,  // SOF1 — extended sequential
+        0xC2,  // SOF2 — progressif
+    ];
+
     /** Profondeur maximale de récursion dans les sous-IFD. */
     private const MAX_SUB_IFD_DEPTH = 4;
 
@@ -41,17 +60,23 @@ final class TiffPreviewParser implements PreviewParserInterface
             $this->collectFromIfd($reader, $offset, $candidates, 0);
         }
 
-        if ([] === $candidates) {
-            throw new PreviewNotFoundException(
-                sprintf('Aucune preview JPEG dans %s.', basename($path)),
-            );
-        }
-
         // La plus grande preview est la plus utile : un RAW en porte souvent
         // plusieurs, de la vignette 160×120 à la pleine résolution.
         usort($candidates, static fn (array $a, array $b): int => $b['length'] <=> $a['length']);
 
-        return $this->buildPreview($reader, $candidates[0], $format, $path);
+        // Un candidat n'est retenu que s'il est réellement décodable : le plus
+        // gros bloc d'un CR2 est le capteur en JPEG lossless, pas une preview.
+        foreach ($candidates as $candidate) {
+            $preview = $this->tryBuildPreview($reader, $candidate, $format);
+
+            if (null !== $preview) {
+                return $preview;
+            }
+        }
+
+        throw new PreviewNotFoundException(
+            sprintf('Aucune preview JPEG exploitable dans %s.', basename($path)),
+        );
     }
 
     /**
@@ -154,7 +179,7 @@ final class TiffPreviewParser implements PreviewParserInterface
      *
      * @throws CorruptedFileException
      */
-    private function buildPreview(TiffReader $reader, array $candidate, Format $format, string $path): ExtractedPreview
+    private function tryBuildPreview(TiffReader $reader, array $candidate, Format $format): ?ExtractedPreview
     {
         $jpeg = $reader->readBytes($candidate['offset'], $candidate['length']);
 
@@ -167,22 +192,30 @@ final class TiffPreviewParser implements PreviewParserInterface
             ));
         }
 
-        [$width, $height] = $this->readJpegDimensions($jpeg, $candidate['offset']);
+        $sof = $this->findSofSegment($jpeg);
 
-        return new ExtractedPreview($jpeg, $width, $height, $format);
+        // Pas de SOF, ou un SOF que personne ne décode (lossless, arithmétique,
+        // différentiel) : ce bloc n'est pas une preview affichable. On passe au
+        // candidat suivant plutôt que de rendre des octets inutilisables.
+        if (null === $sof || !in_array($sof['marker'], self::DECODABLE_SOF_MARKERS, true)) {
+            return null;
+        }
+
+        return new ExtractedPreview($jpeg, $sof['width'], $sof['height'], $format);
     }
 
     /**
-     * Lit les dimensions dans le segment SOF du JPEG.
+     * Localise le segment SOF et en extrait le marqueur et les dimensions.
      *
-     * Les tags ImageWidth/ImageLength de l'IFD ne conviennent pas : ils décrivent
-     * souvent l'image RAW pleine résolution, pas la preview.
+     * Le SOF fait autorité sur les dimensions : les tags ImageWidth/ImageLength
+     * de l'IFD décrivent souvent l'image RAW pleine résolution, pas la preview.
+     * Son marqueur dit aussi **comment** l'image est encodée, donc si un
+     * décodeur courant saura la lire.
      *
-     * @return array{int, int}
-     *
-     * @throws CorruptedFileException
+     * @return array{marker: int, width: int, height: int}|null null si le JPEG
+     *                                                          ne porte aucun SOF
      */
-    private function readJpegDimensions(string $jpeg, int $offset): array
+    private function findSofSegment(string $jpeg): ?array
     {
         $length = strlen($jpeg);
         $position = 2;
@@ -199,19 +232,16 @@ final class TiffPreviewParser implements PreviewParserInterface
             // SOF0 à SOF15, hors DHT (C4), DNL (C8) et DAC (CC) qui partagent la plage.
             if ($marker >= 0xC0 && $marker <= 0xCF && !in_array($marker, [0xC4, 0xC8, 0xCC], true)) {
                 return [
-                    unpack('n', substr($jpeg, $position + 7, 2))[1],
-                    unpack('n', substr($jpeg, $position + 5, 2))[1],
+                    'marker' => $marker,
+                    'width' => unpack('n', substr($jpeg, $position + 7, 2))[1],
+                    'height' => unpack('n', substr($jpeg, $position + 5, 2))[1],
                 ];
             }
 
-            $segmentLength = unpack('n', substr($jpeg, $position + 2, 2))[1];
-            $position += 2 + $segmentLength;
+            $position += 2 + unpack('n', substr($jpeg, $position + 2, 2))[1];
         }
 
-        throw new CorruptedFileException(sprintf(
-            'JPEG sans segment SOF à l\'offset %d : dimensions introuvables.',
-            $offset,
-        ));
+        return null;
     }
 
     /**
