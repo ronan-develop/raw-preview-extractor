@@ -70,6 +70,73 @@ jobs:
       - name: 🧪 Run PHPUnit
         run: vendor/bin/phpunit --colors=always
 
+  # Les règles de CONTRIBUTING.md ne valent que si une machine les vérifie.
+  conventions:
+    name: 📏 Conventions
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v5
+
+      - name: 🚧 No Symfony outside the bridge
+        run: |
+          # La librairie doit rester utilisable hors Symfony : c'est la raison
+          # d'être d'un type: library plutôt qu'un symfony-bundle.
+          found=$(grep -rl 'Symfony\\' src/ --include='*.php' | grep -v '^src/Bridge/' || true)
+          if [ -n "$found" ]; then
+            echo "::error::Symfony importé hors de src/Bridge/ :"; echo "$found"; exit 1
+          fi
+          echo "✅ Symfony confiné à src/Bridge/"
+
+      - name: 🚧 No GD in src/
+        run: |
+          # GD sert à fabriquer et valider dans les tests, jamais à extraire :
+          # le package ne doit dépendre d'aucune extension.
+          found=$(grep -rlE 'imagecreate|imagejpeg|getimagesize|imagedestroy' src/ --include='*.php' || true)
+          if [ -n "$found" ]; then
+            echo "::error::GD utilisé dans src/ :"; echo "$found"; exit 1
+          fi
+          echo "✅ aucun appel GD dans src/"
+
+      - name: 🚧 declare(strict_types=1) everywhere
+        run: |
+          found=$(find src -name '*.php' ! -exec grep -lq 'declare(strict_types=1);' {} \; -print)
+          if [ -n "$found" ]; then
+            echo "::error::declare(strict_types=1) manquant :"; echo "$found"; exit 1
+          fi
+          echo "✅ strict_types dans tous les fichiers de src/"
+
+      - name: 🚧 No CPU-dependent unpack
+        run: |
+          # S et L suivent l'endianness de la machine : le parsing deviendrait
+          # dépendant du CPU. Seuls v/V (little) et n/N/J (big) sont admis.
+          found=$(grep -rnE "unpack\('[SL]" src/ --include='*.php' || true)
+          if [ -n "$found" ]; then
+            echo "::error::unpack() dépendant du CPU :"; echo "$found"; exit 1
+          fi
+          echo "✅ endianness explicite partout"
+
+      - name: 🚧 Public API documented in English
+        run: |
+          # Le package est public : son PHPDoc est sa documentation d'API.
+          found=$(grep -rlP '^\s*\*.*\b(le|la|les|une|des|du|qui|que|dans|pour|avec|sur|est|sont|cette|ce)\b' \
+                  src/ --include='*.php' || true)
+          if [ -n "$found" ]; then
+            echo "::error::commentaires en français dans src/ :"; echo "$found"; exit 1
+          fi
+          echo "✅ commentaires en anglais"
+
+      - name: 🚧 No RAW committed
+        run: |
+          # Un RAW porte des EXIF (numéro de série, GPS) et resterait dans
+          # l'historique git à vie.
+          found=$(git ls-files | grep -iE '\.(cr2|cr3|nef|arw|dng|raf|orf|rw2)$' || true)
+          if [ -n "$found" ]; then
+            echo "::error::fichier RAW commité :"; echo "$found"; exit 1
+          fi
+          echo "✅ aucun RAW dans le repo"
+
   coverage:
     name: 📊 Couverture (≥ 95 %)
     runs-on: ubuntu-latest
