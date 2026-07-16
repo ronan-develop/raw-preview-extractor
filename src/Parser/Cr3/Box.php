@@ -5,19 +5,19 @@ declare(strict_types=1);
 namespace RonanLenouvel\RawPreviewExtractor\Parser\Cr3;
 
 /**
- * Une boîte ISO-BMFF, localisée dans le fichier.
+ * An ISO-BMFF box, located in the file.
  *
- * La boîte porte sa position et sa taille, jamais son contenu : un `mdat` pèse
- * plusieurs dizaines de mégaoctets, on ne le charge pas pour l'inventorier.
- * C'est {@see IsoBmffBoxReader::readPayload()} qui lit les octets à la demande.
+ * The box carries its position and its size, never its content: an `mdat`
+ * weighs several tens of megabytes, we do not load it just to inventory it.
+ * It is {@see IsoBmffBoxReader::readPayload()} that reads the bytes on demand.
  */
 final readonly class Box
 {
     /**
-     * @param string $type          type sur 4 caractères ASCII (`ftyp`, `moov`, `uuid`…)
-     * @param int    $offset        position de la boîte dans le fichier, en-tête compris
-     * @param int    $payloadOffset position du contenu, après l'en-tête
-     * @param int    $payloadLength taille du contenu, en octets
+     * @param string $type          4-ASCII-character type (`ftyp`, `moov`, `uuid`…)
+     * @param int    $offset        position of the box in the file, header included
+     * @param int    $payloadOffset position of the content, after the header
+     * @param int    $payloadLength size of the content, in bytes
      */
     public function __construct(
         public string $type,

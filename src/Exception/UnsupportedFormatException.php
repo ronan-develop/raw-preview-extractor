@@ -5,15 +5,15 @@ declare(strict_types=1);
 namespace RonanLenouvel\RawPreviewExtractor\Exception;
 
 /**
- * Le fichier n'est pas un RAW pris en charge par ce package.
+ * The file is not a RAW supported by this package.
  *
- * Deux cas mènent ici : la signature n'est reconnue comme aucun format connu,
- * ou le format est reconnu mais aucun parseur ne lui est associé. Du point de
- * vue de l'appelant, les deux reviennent au même — le fichier ne peut pas être
- * traité.
+ * Two cases lead here: the signature is not recognised as any known format, or
+ * the format is recognised but no parser is associated with it. From the
+ * caller's point of view, both amount to the same thing — the file cannot be
+ * processed.
  *
- * Utilisez {@see \RonanLenouvel\RawPreviewExtractor\RawPreviewExtractorInterface::supports()}
- * pour l'éviter sans passer par un `try`/`catch`.
+ * Use {@see \RonanLenouvel\RawPreviewExtractor\RawPreviewExtractorInterface::supports()}
+ * to avoid it without going through a `try`/`catch`.
  */
 final class UnsupportedFormatException extends \RuntimeException implements RawPreviewExtractorException
 {

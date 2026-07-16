@@ -44,7 +44,7 @@ final class TiffReaderTest extends TestCase
     public function testThrowsOnUnknownByteOrder(): void
     {
         $this->expectException(CorruptedFileException::class);
-        $this->expectExceptionMessage('Ordre d\'octets');
+        $this->expectExceptionMessage('Unknown byte order');
 
         $this->reader("XX\x2a\x00" . pack('V', 8) . str_repeat("\x00", 8));
     }
@@ -52,7 +52,7 @@ final class TiffReaderTest extends TestCase
     public function testThrowsOnWrongMagicNumber(): void
     {
         $this->expectException(CorruptedFileException::class);
-        $this->expectExceptionMessage('Nombre magique');
+        $this->expectExceptionMessage('Invalid TIFF magic');
 
         // 43 au lieu de 42 : l'en-tête a la bonne forme mais n'est pas du TIFF.
         $this->reader('II' . pack('v', 43) . pack('V', 8) . str_repeat("\x00", 8));
@@ -69,7 +69,7 @@ final class TiffReaderTest extends TestCase
     public function testThrowsOnMissingFile(): void
     {
         $this->expectException(CorruptedFileException::class);
-        $this->expectExceptionMessage('illisible');
+        $this->expectExceptionMessage('Unreadable file');
 
         new TiffReader('/chemin/inexistant.cr2');
     }
@@ -255,7 +255,7 @@ final class TiffReaderTest extends TestCase
     public function testThrowsWhenIfdOffsetIsOutOfBounds(): void
     {
         $this->expectException(CorruptedFileException::class);
-        $this->expectExceptionMessage('hors bornes');
+        $this->expectExceptionMessage('out of bounds');
 
         $this->reader('II' . pack('v', 42) . pack('V', 9999) . str_repeat("\x00", 8))
             ->readIfd(9999);
@@ -273,7 +273,7 @@ final class TiffReaderTest extends TestCase
     public function testThrowsWhenIfdIsTruncatedMidEntry(): void
     {
         $this->expectException(CorruptedFileException::class);
-        $this->expectExceptionMessage('tronqué');
+        $this->expectExceptionMessage('Truncated');
 
         // Annonce 3 entrées, le fichier s'arrête au milieu de la première.
         $this->reader('II' . pack('v', 42) . pack('V', 8) . pack('v', 3) . "\x0F\x01\x02")

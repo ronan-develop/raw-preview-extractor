@@ -5,13 +5,13 @@ declare(strict_types=1);
 namespace RonanLenouvel\RawPreviewExtractor\Exception;
 
 /**
- * Le fichier est illisible ou structurellement invalide.
+ * The file is unreadable or structurally invalid.
  *
- * Couvre : fichier absent ou non lisible, en-tête absent ou tronqué, offset
- * pointant hors du fichier, taille absurde, structure incohérente.
+ * Covers: missing or unreadable file, missing or truncated header, offset
+ * pointing outside the file, absurd size, inconsistent structure.
  *
- * À distinguer de {@see PreviewNotFoundException} : un fichier **tronqué** est
- * corrompu, pas dépourvu de preview. La distinction est testée — ne la brouille pas.
+ * To be distinguished from {@see PreviewNotFoundException}: a **truncated** file
+ * is corrupted, not devoid of a preview. The distinction is tested — do not blur it.
  */
 final class CorruptedFileException extends \RuntimeException implements RawPreviewExtractorException
 {

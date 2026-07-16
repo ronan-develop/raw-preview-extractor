@@ -11,16 +11,16 @@ use Symfony\Component\DependencyInjection\Loader\PhpFileLoader;
 use Symfony\Component\HttpKernel\Bundle\AbstractBundle;
 
 /**
- * Bundle optionnel : enregistre l'extracteur comme service auto-wirable.
+ * Optional bundle: registers the extractor as an autowirable service.
  *
- * Il se limite au **câblage** — aucune logique métier, aucun parsing. La
- * librairie fonctionne à l'identique sans lui, en Laravel comme en PHP nu :
+ * It limits itself to **wiring** — no business logic, no parsing. The library
+ * works identically without it, in Laravel as in plain PHP:
  *
  * ```php
  * $extractor = RawPreviewExtractor::createDefault();
  * ```
  *
- * Activation (Flex le fait automatiquement) :
+ * Activation (Flex does it automatically):
  *
  * ```php
  * // config/bundles.php
@@ -29,7 +29,7 @@ use Symfony\Component\HttpKernel\Bundle\AbstractBundle;
  * ];
  * ```
  *
- * `RawPreviewExtractorInterface` devient alors injectable par autowiring.
+ * `RawPreviewExtractorInterface` then becomes injectable through autowiring.
  */
 final class RawPreviewExtractorBundle extends AbstractBundle
 {
@@ -41,8 +41,8 @@ final class RawPreviewExtractorBundle extends AbstractBundle
         ContainerConfigurator $container,
         ContainerBuilder $builder,
     ): void {
-        // Chemin physique : la notation @Bundle est dépréciée pour les bundles
-        // réutilisables.
+        // Physical path: the @Bundle notation is deprecated for reusable
+        // bundles.
         $loader = new PhpFileLoader($builder, new FileLocator(__DIR__ . '/Resources/config'));
         $loader->load('services.php');
     }

@@ -7,37 +7,37 @@ namespace RonanLenouvel\RawPreviewExtractor\Parser\Cr3;
 use RonanLenouvel\RawPreviewExtractor\Exception\CorruptedFileException;
 
 /**
- * Lecture bas niveau d'un conteneur ISO-BMFF (famille MP4/HEIF, dont le CR3).
+ * Low-level reading of an ISO-BMFF container (MP4/HEIF family, CR3 included).
  *
- * Ce lecteur connaît la **structure** — un arbre de boîtes `[taille][type][contenu]` —
- * et rien de la sémantique : il ignore ce qu'est une preview.
+ * This reader knows the **structure** — a tree of `[size][type][content]` boxes —
+ * and nothing of the semantics: it has no idea what a preview is.
  *
- * **ISO-BMFF est toujours big-endian**, quel que soit l'appareil : contrairement
- * au TIFF, il n'y a pas d'ordre d'octets à détecter.
+ * **ISO-BMFF is always big-endian**, whatever the camera: unlike TIFF, there is
+ * no byte order to detect.
  *
- * Le fichier est traité comme de l'entrée **non fiable** : chaque taille est
- * validée contre la taille réelle du fichier, la progression du curseur est
- * vérifiée à chaque itération, et la récursion est bornée.
+ * The file is treated as **untrusted** input: every size is validated against
+ * the file's real size, the cursor's progress is checked at each iteration, and
+ * the recursion is bounded.
  */
 final class IsoBmffBoxReader
 {
-    /** Taille d'un en-tête de boîte : 4 octets de taille + 4 de type. */
+    /** Size of a box header: 4 bytes of size + 4 of type. */
     private const HEADER_LENGTH = 8;
 
-    /** En-tête étendu, quand la taille est portée sur 64 bits. */
+    /** Extended header, when the size is carried on 64 bits. */
     private const EXTENDED_HEADER_LENGTH = 16;
 
-    /** Longueur de l'UUID qui suit le type d'une boîte `uuid`. */
+    /** Length of the UUID that follows the type of a `uuid` box. */
     private const UUID_LENGTH = 16;
 
-    /** Profondeur maximale d'imbrication : un fichier hostile pourrait saturer la pile. */
+    /** Maximum nesting depth: a hostile file could saturate the stack. */
     private const MAX_DEPTH = 8;
 
     /**
-     * Boîtes dont le contenu est lui-même un arbre de boîtes.
+     * Boxes whose content is itself a tree of boxes.
      *
-     * Toute autre boîte est une feuille : `mdat` contient des données brutes que
-     * l'on prendrait pour des boîtes si on descendait dedans.
+     * Any other box is a leaf: `mdat` contains raw data that we would mistake
+     * for boxes if we descended into it.
      */
     private const CONTAINER_TYPES = ['moov', 'trak', 'mdia', 'minf', 'stbl', 'uuid'];
 
@@ -47,14 +47,14 @@ final class IsoBmffBoxReader
     private readonly int $fileSize;
 
     /**
-     * @param string $path chemin du fichier à lire
+     * @param string $path path of the file to read
      *
-     * @throws CorruptedFileException si le fichier est illisible
+     * @throws CorruptedFileException if the file is unreadable
      */
     public function __construct(private readonly string $path)
     {
         if (!is_file($path)) {
-            throw new CorruptedFileException(sprintf('Fichier illisible : %s', $path));
+            throw new CorruptedFileException(sprintf('Unreadable file: %s', $path));
         }
 
         $this->handle = fopen($path, 'rb');
@@ -67,20 +67,20 @@ final class IsoBmffBoxReader
     }
 
     /**
-     * Inventorie les boîtes de premier niveau.
+     * Inventories the top-level boxes.
      *
      * @return list<Box>
      *
-     * @throws CorruptedFileException si une taille est invalide ou hors bornes
+     * @throws CorruptedFileException if a size is invalid or out of bounds
      */
     public function readBoxes(): array
     {
-        // Un fichier trop court pour porter ne serait-ce qu'un en-tête n'est pas
-        // un conteneur vide : il est tronqué. À l'intérieur d'une boîte en
-        // revanche, un reliquat de moins de 8 octets est du padding normal.
+        // A file too short to carry even a header is not an empty container: it
+        // is truncated. Inside a box on the other hand, a remainder of less than
+        // 8 bytes is normal padding.
         if ($this->fileSize < self::HEADER_LENGTH) {
             throw new CorruptedFileException(sprintf(
-                'Fichier tronqué : %d octets, moins qu\'un en-tête de boîte.',
+                'Truncated file: %d bytes, less than a box header.',
                 $this->fileSize,
             ));
         }
@@ -89,11 +89,11 @@ final class IsoBmffBoxReader
     }
 
     /**
-     * Cherche la première boîte du type donné, en descendant dans les conteneurs.
+     * Looks for the first box of the given type, descending into the containers.
      *
-     * @param string $type type sur 4 caractères
+     * @param string $type 4-character type
      *
-     * @throws CorruptedFileException si la structure est invalide
+     * @throws CorruptedFileException if the structure is invalid
      */
     public function find(string $type): ?Box
     {
@@ -101,14 +101,14 @@ final class IsoBmffBoxReader
     }
 
     /**
-     * Cherche une boîte `uuid` portant l'UUID donné.
+     * Looks for a `uuid` box carrying the given UUID.
      *
-     * Plusieurs boîtes `uuid` distinctes coexistent dans un CR3 : le type ne
-     * suffit pas à les identifier, il faut lire les 16 octets qui le suivent.
+     * Several distinct `uuid` boxes coexist in a CR3: the type is not enough to
+     * identify them, the 16 bytes that follow it must be read.
      *
-     * @param string $uuid les 16 octets bruts de l'UUID recherché
+     * @param string $uuid the 16 raw bytes of the UUID being looked for
      *
-     * @throws CorruptedFileException si la structure est invalide
+     * @throws CorruptedFileException if the structure is invalid
      */
     public function findUuid(string $uuid): ?Box
     {
@@ -116,11 +116,11 @@ final class IsoBmffBoxReader
     }
 
     /**
-     * Inventorie les boîtes filles d'un conteneur.
+     * Inventories the child boxes of a container.
      *
      * @return list<Box>
      *
-     * @throws CorruptedFileException si la structure est invalide
+     * @throws CorruptedFileException if the structure is invalid
      */
     public function childBoxes(Box $box): array
     {
@@ -128,9 +128,9 @@ final class IsoBmffBoxReader
     }
 
     /**
-     * Lit le contenu d'une boîte.
+     * Reads the content of a box.
      *
-     * @throws CorruptedFileException si la plage sort du fichier
+     * @throws CorruptedFileException if the range falls outside the file
      */
     public function readPayload(Box $box): string
     {
@@ -138,15 +138,15 @@ final class IsoBmffBoxReader
     }
 
     /**
-     * Lit `$length` octets bruts à partir de `$offset`.
+     * Reads `$length` raw bytes starting from `$offset`.
      *
-     * @throws CorruptedFileException si la plage sort du fichier
+     * @throws CorruptedFileException if the range falls outside the file
      */
     public function readBytes(int $offset, int $length): string
     {
         if ($length < 1 || $offset < 0 || $offset + $length > $this->fileSize) {
             throw new CorruptedFileException(sprintf(
-                'Lecture hors bornes : %d octets à l\'offset %d (taille du fichier : %d).',
+                'Read out of bounds: %d bytes at offset %d (file size: %d).',
                 $length,
                 $offset,
                 $this->fileSize,
@@ -159,7 +159,7 @@ final class IsoBmffBoxReader
     }
 
     /**
-     * Inventorie les boîtes contenues dans une plage donnée.
+     * Inventories the boxes contained in a given range.
      *
      * @return list<Box>
      *
@@ -174,9 +174,9 @@ final class IsoBmffBoxReader
             $box = $this->readBoxAt($offset, $end);
             $boxes[] = $box;
 
-            // La progression est structurellement garantie : readBoxAt() refuse
-            // toute taille inférieure à l'en-tête, donc le curseur avance d'au
-            // moins 8 octets à chaque tour.
+            // Progress is structurally guaranteed: readBoxAt() refuses any size
+            // smaller than the header, so the cursor advances by at least
+            // 8 bytes on each pass.
             $offset = $box->payloadOffset + $box->payloadLength;
         }
 
@@ -184,7 +184,7 @@ final class IsoBmffBoxReader
     }
 
     /**
-     * Décode l'en-tête d'une boîte, en traitant les trois cas particuliers de `size`.
+     * Decodes a box header, handling the three special cases of `size`.
      *
      * @throws CorruptedFileException
      */
@@ -194,13 +194,13 @@ final class IsoBmffBoxReader
         $size = unpack('N', substr($header, 0, 4))[1];
         $type = substr($header, 4, 4);
 
-        // size == 1 : la taille réelle est sur 64 bits, juste après le type.
+        // size == 1: the real size is on 64 bits, right after the type.
         if (1 === $size) {
             $size = unpack('J', $this->readBytes($offset + self::HEADER_LENGTH, 8))[1];
 
             if ($size < self::EXTENDED_HEADER_LENGTH) {
                 throw new CorruptedFileException(sprintf(
-                    'Taille de boîte 64 bits invalide : %d à l\'offset %d.',
+                    'Invalid 64-bit box size: %d at offset %d.',
                     $size,
                     $offset,
                 ));
@@ -209,14 +209,14 @@ final class IsoBmffBoxReader
             return $this->box($type, $offset, self::EXTENDED_HEADER_LENGTH, $size, $end);
         }
 
-        // size == 0 : la boîte s'étend jusqu'à la fin du fichier.
+        // size == 0: the box extends to the end of the file.
         if (0 === $size) {
             return $this->box($type, $offset, self::HEADER_LENGTH, $end - $offset, $end);
         }
 
         if ($size < self::HEADER_LENGTH) {
             throw new CorruptedFileException(sprintf(
-                'Taille de boîte invalide : %d à l\'offset %d (minimum 8).',
+                'Invalid box size: %d at offset %d (minimum 8).',
                 $size,
                 $offset,
             ));
@@ -226,13 +226,13 @@ final class IsoBmffBoxReader
     }
 
     /**
-     * @throws CorruptedFileException si la boîte déborde de la plage autorisée
+     * @throws CorruptedFileException if the box overflows the allowed range
      */
     private function box(string $type, int $offset, int $headerLength, int $size, int $end): Box
     {
         if ($offset + $size > $end) {
             throw new CorruptedFileException(sprintf(
-                'Boîte « %s » hors bornes : %d octets annoncés à l\'offset %d.',
+                'Box "%s" out of bounds: %d bytes announced at offset %d.',
                 $type,
                 $size,
                 $offset,
@@ -243,10 +243,10 @@ final class IsoBmffBoxReader
     }
 
     /**
-     * Cherche récursivement une boîte `uuid` portant l'UUID donné.
+     * Recursively looks for a `uuid` box carrying the given UUID.
      *
-     * Dans un CR3 réel, l'UUID Canon vit sous `moov` et non à la racine : une
-     * recherche limitée au premier niveau ne le trouverait jamais.
+     * In a real CR3, the Canon UUID lives under `moov` and not at the root: a
+     * search limited to the first level would never find it.
      *
      * @param list<Box> $boxes
      *
@@ -311,7 +311,7 @@ final class IsoBmffBoxReader
     }
 
     /**
-     * Boîtes filles d'un conteneur.
+     * Child boxes of a container.
      *
      * @return list<Box>
      *
@@ -319,7 +319,7 @@ final class IsoBmffBoxReader
      */
     private function childrenOf(Box $box): array
     {
-        // Une boîte uuid porte 16 octets d'UUID avant son contenu.
+        // A uuid box carries 16 bytes of UUID before its content.
         $start = 'uuid' === $box->type
             ? $box->payloadOffset + self::UUID_LENGTH
             : $box->payloadOffset;
@@ -333,14 +333,14 @@ final class IsoBmffBoxReader
         try {
             return $this->readBoxesIn($start, $end);
         } catch (CorruptedFileException) {
-            // Descendre dans un conteneur est spéculatif : toutes les boîtes
-            // `uuid` ne contiennent pas des boîtes. Celle qui porte PRVW dans un
-            // CR3 commence par un en-tête propriétaire, dont les octets lus
-            // comme un en-tête donnent une taille absurde.
+            // Descending into a container is speculative: not every `uuid` box
+            // contains boxes. The one carrying PRVW in a CR3 starts with a
+            // proprietary header, whose bytes read as a header give an absurd
+            // size.
             //
-            // Une boîte sans enfants lisibles n'a pas d'enfants — ce n'est pas
-            // une corruption du fichier. Les lectures non spéculatives
-            // (readBoxes, readPayload, readBytes) restent strictes.
+            // A box without readable children has no children — this is not a
+            // corruption of the file. The non-speculative reads (readBoxes,
+            // readPayload, readBytes) stay strict.
             return [];
         }
     }

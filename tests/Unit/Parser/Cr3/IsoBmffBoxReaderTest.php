@@ -109,7 +109,7 @@ final class IsoBmffBoxReaderTest extends TestCase
     public function testThrowsOnSizeSmallerThanHeader(): void
     {
         $this->expectException(CorruptedFileException::class);
-        $this->expectExceptionMessage('Taille de boîte');
+        $this->expectExceptionMessage('Invalid box size');
 
         // size = 4 : plus petit que les 8 octets d'en-tête. Sans garde, l'offset
         // reculerait et la lecture partirait en boucle.
@@ -129,7 +129,7 @@ final class IsoBmffBoxReaderTest extends TestCase
     public function testThrowsOnSizeBeyondFile(): void
     {
         $this->expectException(CorruptedFileException::class);
-        $this->expectExceptionMessage('hors bornes');
+        $this->expectExceptionMessage('out of bounds');
 
         // La boîte annonce 9999 octets dans un fichier qui en fait 16.
         $this->reader(pack('N', 9999) . 'mdat' . str_repeat("\x00", 8))->readBoxes();
@@ -146,7 +146,7 @@ final class IsoBmffBoxReaderTest extends TestCase
     public function testThrowsOnMissingFile(): void
     {
         $this->expectException(CorruptedFileException::class);
-        $this->expectExceptionMessage('illisible');
+        $this->expectExceptionMessage('Unreadable file');
 
         new IsoBmffBoxReader('/chemin/inexistant.cr3');
     }
@@ -193,7 +193,7 @@ final class IsoBmffBoxReaderTest extends TestCase
     public function testThrowsWhenReadingBytesOutOfBounds(): void
     {
         $this->expectException(CorruptedFileException::class);
-        $this->expectExceptionMessage('hors bornes');
+        $this->expectExceptionMessage('out of bounds');
 
         // readBytes est l'API publique du reader : Cr3PreviewParser l'appellera
         // avec des offsets issus du fichier, donc non fiables.

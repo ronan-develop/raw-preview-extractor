@@ -5,47 +5,47 @@ declare(strict_types=1);
 namespace RonanLenouvel\RawPreviewExtractor\Parser\Tiff;
 
 /**
- * Tags TIFF/EXIF utiles à la localisation d'une preview JPEG.
+ * TIFF/EXIF tags useful for locating a JPEG preview.
  *
- * Cette énumération ne prétend pas couvrir TIFF 6.0 : seuls figurent les tags
- * que le package exploite réellement. Un tag absent d'ici n'est pas une erreur,
- * il est simplement ignoré au parcours.
+ * This enum does not claim to cover TIFF 6.0: only the tags the package
+ * actually uses appear here. A tag missing from this list is not an error, it
+ * is simply ignored while walking.
  */
 enum TiffTag: int
 {
-    /** Largeur de l'image décrite par l'IFD courant. */
+    /** Width of the image described by the current IFD. */
     case ImageWidth = 0x0100;
 
-    /** Hauteur de l'image décrite par l'IFD courant. */
+    /** Height of the image described by the current IFD. */
     case ImageLength = 0x0101;
 
-    /** Schéma de compression : 6 ou 7 = JPEG, 1 = non compressé. */
+    /** Compression scheme: 6 or 7 = JPEG, 1 = uncompressed. */
     case Compression = 0x0103;
 
-    /** Fabricant de l'appareil. */
+    /** Camera manufacturer. */
     case Make = 0x010F;
 
-    /** Modèle de l'appareil. */
+    /** Camera model. */
     case Model = 0x0110;
 
-    /** Offset(s) des bandes de données image. */
+    /** Offset(s) of the image data strips. */
     case StripOffsets = 0x0111;
 
-    /** Taille(s) des bandes de données image. */
+    /** Size(s) of the image data strips. */
     case StripByteCounts = 0x0117;
 
-    /** Offsets des sous-IFD — souvent l'emplacement de la preview. */
+    /** Offsets of the SubIFDs — often where the preview lives. */
     case SubIfds = 0x014A;
 
-    /** Offset du JPEG embarqué. */
+    /** Offset of the embedded JPEG. */
     case JpegInterchangeFormat = 0x0201;
 
-    /** Taille du JPEG embarqué, en octets. */
+    /** Size of the embedded JPEG, in bytes. */
     case JpegInterchangeFormatLength = 0x0202;
 
-    /** Pointeur vers l'IFD EXIF. */
+    /** Pointer to the EXIF IFD. */
     case ExifIfdPointer = 0x8769;
 
-    /** Présent uniquement dans les DNG. */
+    /** Present only in DNG files. */
     case DngVersion = 0xC612;
 }

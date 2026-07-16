@@ -11,44 +11,44 @@ use RonanLenouvel\RawPreviewExtractor\Format\Format;
 use RonanLenouvel\RawPreviewExtractor\Parser\PreviewParserInterface;
 
 /**
- * Extrait la preview JPEG des RAW bâtis sur TIFF : CR2, NEF, ARW et DNG.
+ * Extracts the JPEG preview of RAW files built on TIFF: CR2, NEF, ARW and DNG.
  *
- * Un seul parseur couvre les quatre formats. Plutôt que de coder en dur
- * l'organisation d'un constructeur — variable d'une génération d'appareil à
- * l'autre — il parcourt **tous** les IFD, collecte tous les blocs JPEG
- * candidats et retient **le plus grand**.
+ * A single parser covers the four formats. Rather than hard-coding a
+ * manufacturer's layout — which varies from one camera generation to the next —
+ * it walks **all** the IFDs, collects every candidate JPEG block and keeps
+ * **the largest**.
  *
- * Ce parseur orchestre : il ne lit pas d'octets lui-même, il délègue au
+ * This parser orchestrates: it does not read bytes itself, it delegates to the
  * {@see TiffReader}.
  */
 final class TiffPreviewParser implements PreviewParserInterface
 {
-    /** Compression JPEG « ancienne » et JPEG au sens TIFF 6.0. */
+    /** "Old-style" JPEG compression and JPEG in the TIFF 6.0 sense. */
     private const JPEG_COMPRESSIONS = [6, 7];
 
-    /** Tout JPEG commence par ce marqueur (SOI). */
+    /** Every JPEG starts with this marker (SOI). */
     private const JPEG_MAGIC = "\xFF\xD8";
 
     /**
-     * Marqueurs SOF d'un JPEG réellement décodable.
+     * SOF markers of a genuinely decodable JPEG.
      *
-     * `Compression = 6` ne suffit pas à distinguer une preview des données du
-     * capteur : Canon stocke celles-ci en **JPEG lossless** dans un CR2, avec le
-     * même tag. Ces blocs sont les plus gros du fichier et gagneraient donc la
-     * comparaison par taille — pour rendre 28 Mo qu'aucun décodeur ne lit.
+     * `Compression = 6` is not enough to tell a preview from the sensor data:
+     * Canon stores the latter as **lossless JPEG** in a CR2, with the same tag.
+     * Those blocks are the biggest in the file and would therefore win the
+     * comparison by size — only to return 28 MB that no decoder reads.
      *
-     * Vérifié sur six appareils : les previews utilisent toutes SOF0 ; seul le
-     * capteur d'un CR2 utilise SOF3.
+     * Verified on six cameras: the previews all use SOF0; only a CR2's sensor
+     * uses SOF3.
      *
      * @var list<int>
      */
     private const DECODABLE_SOF_MARKERS = [
-        0xC0,  // SOF0 — baseline, le cas de toutes les previews observées
+        0xC0,  // SOF0 — baseline, the case of every observed preview
         0xC1,  // SOF1 — extended sequential
-        0xC2,  // SOF2 — progressif
+        0xC2,  // SOF2 — progressive
     ];
 
-    /** Profondeur maximale de récursion dans les sous-IFD. */
+    /** Maximum recursion depth into the SubIFDs. */
     private const MAX_SUB_IFD_DEPTH = 4;
 
     public function extract(string $path, Format $format): ExtractedPreview
@@ -60,12 +60,12 @@ final class TiffPreviewParser implements PreviewParserInterface
             $this->collectFromIfd($reader, $offset, $candidates, 0);
         }
 
-        // La plus grande preview est la plus utile : un RAW en porte souvent
-        // plusieurs, de la vignette 160×120 à la pleine résolution.
+        // The largest preview is the most useful: a RAW often carries several,
+        // from the 160x120 thumbnail to full resolution.
         usort($candidates, static fn (array $a, array $b): int => $b['length'] <=> $a['length']);
 
-        // Un candidat n'est retenu que s'il est réellement décodable : le plus
-        // gros bloc d'un CR2 est le capteur en JPEG lossless, pas une preview.
+        // A candidate is only kept if it is genuinely decodable: the biggest
+        // block of a CR2 is the sensor in lossless JPEG, not a preview.
         foreach ($candidates as $candidate) {
             $preview = $this->tryBuildPreview($reader, $candidate, $format);
 
@@ -75,12 +75,12 @@ final class TiffPreviewParser implements PreviewParserInterface
         }
 
         throw new PreviewNotFoundException(
-            sprintf('Aucune preview JPEG exploitable dans %s.', basename($path)),
+            sprintf('No usable JPEG preview in %s.', basename($path)),
         );
     }
 
     /**
-     * Collecte les candidats d'un IFD, puis descend dans ses sous-IFD.
+     * Collects the candidates of an IFD, then descends into its SubIFDs.
      *
      * @param list<array{offset: int, length: int}> $candidates
      *
@@ -107,7 +107,7 @@ final class TiffPreviewParser implements PreviewParserInterface
     }
 
     /**
-     * Le chemin courant : le couple JPEGInterchangeFormat / …Length.
+     * The common path: the JPEGInterchangeFormat / …Length pair.
      *
      * @param array<int, IfdEntry> $entries
      *
@@ -126,9 +126,9 @@ final class TiffPreviewParser implements PreviewParserInterface
     }
 
     /**
-     * L'autre chemin : StripOffsets / StripByteCounts, si et seulement si le
-     * tag Compression annonce du JPEG. Sans ce contrôle, on prendrait les
-     * données brutes du capteur pour une preview.
+     * The other path: StripOffsets / StripByteCounts, if and only if the
+     * Compression tag announces JPEG. Without this check, we would mistake the
+     * raw sensor data for a preview.
      *
      * @param array<int, IfdEntry> $entries
      *
@@ -183,19 +183,19 @@ final class TiffPreviewParser implements PreviewParserInterface
     {
         $jpeg = $reader->readBytes($candidate['offset'], $candidate['length']);
 
-        // Un tag qui ment sur son contenu est courant dans les RAW : le
-        // PowerShot G12 annonce Compression = 6 sur des données brutes, dans
-        // l'IFD dont le bloc est justement le plus gros. Ce n'est pas une
-        // corruption du fichier — c'est un candidat de plus à écarter.
+        // A tag that lies about its content is common in RAW files: the
+        // PowerShot G12 announces Compression = 6 on raw data, in the IFD whose
+        // block happens to be the biggest. This is not a corruption of the file
+        // — it is one more candidate to rule out.
         if (!str_starts_with($jpeg, self::JPEG_MAGIC)) {
             return null;
         }
 
         $sof = $this->findSofSegment($jpeg);
 
-        // Pas de SOF, ou un SOF que personne ne décode (lossless, arithmétique,
-        // différentiel) : ce bloc n'est pas une preview affichable. On passe au
-        // candidat suivant plutôt que de rendre des octets inutilisables.
+        // No SOF, or a SOF that nobody decodes (lossless, arithmetic,
+        // differential): this block is not a displayable preview. We move on to
+        // the next candidate rather than return unusable bytes.
         if (null === $sof || !in_array($sof['marker'], self::DECODABLE_SOF_MARKERS, true)) {
             return null;
         }
@@ -204,15 +204,15 @@ final class TiffPreviewParser implements PreviewParserInterface
     }
 
     /**
-     * Localise le segment SOF et en extrait le marqueur et les dimensions.
+     * Locates the SOF segment and extracts its marker and dimensions from it.
      *
-     * Le SOF fait autorité sur les dimensions : les tags ImageWidth/ImageLength
-     * de l'IFD décrivent souvent l'image RAW pleine résolution, pas la preview.
-     * Son marqueur dit aussi **comment** l'image est encodée, donc si un
-     * décodeur courant saura la lire.
+     * The SOF is authoritative on the dimensions: the IFD's ImageWidth/ImageLength
+     * tags often describe the full-resolution RAW image, not the preview. Its
+     * marker also says **how** the image is encoded, hence whether a common
+     * decoder will know how to read it.
      *
-     * @return array{marker: int, width: int, height: int}|null null si le JPEG
-     *                                                          ne porte aucun SOF
+     * @return array{marker: int, width: int, height: int}|null null if the JPEG
+     *                                                          carries no SOF
      */
     private function findSofSegment(string $jpeg): ?array
     {
@@ -228,7 +228,7 @@ final class TiffPreviewParser implements PreviewParserInterface
 
             $marker = ord($jpeg[$position + 1]);
 
-            // SOF0 à SOF15, hors DHT (C4), DNL (C8) et DAC (CC) qui partagent la plage.
+            // SOF0 to SOF15, except DHT (C4), DNL (C8) and DAC (CC) which share the range.
             if ($marker >= 0xC0 && $marker <= 0xCF && !in_array($marker, [0xC4, 0xC8, 0xCC], true)) {
                 return [
                     'marker' => $marker,

@@ -5,27 +5,27 @@ declare(strict_types=1);
 namespace RonanLenouvel\RawPreviewExtractor\Format;
 
 /**
- * Formats RAW supportés par le package.
+ * RAW formats supported by the package.
  *
- * La valeur de chaque cas est l'extension usuelle du format, en minuscules.
- * Elle sert d'identifiant stable — notamment comme clé de la map
- * Format → PreviewParserInterface — et non de critère de détection : celle-ci
- * repose exclusivement sur la signature binaire du fichier.
+ * The value of each case is the format's usual extension, in lowercase. It acts
+ * as a stable identifier — notably as the key of the
+ * Format → PreviewParserInterface map — and not as a detection criterion:
+ * detection relies exclusively on the file's binary signature.
  */
 enum Format: string
 {
-    /** Canon RAW v2 — conteneur TIFF. */
+    /** Canon RAW v2 — TIFF container. */
     case CR2 = 'cr2';
 
-    /** Canon RAW v3 — conteneur ISO-BMFF. */
+    /** Canon RAW v3 — ISO-BMFF container. */
     case CR3 = 'cr3';
 
-    /** Nikon Electronic Format — conteneur TIFF. */
+    /** Nikon Electronic Format — TIFF container. */
     case NEF = 'nef';
 
-    /** Sony Alpha RAW — conteneur TIFF. */
+    /** Sony Alpha RAW — TIFF container. */
     case ARW = 'arw';
 
-    /** Adobe Digital Negative — conteneur TIFF. */
+    /** Adobe Digital Negative — TIFF container. */
     case DNG = 'dng';
 }

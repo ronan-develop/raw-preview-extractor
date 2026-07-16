@@ -13,11 +13,11 @@ use RonanLenouvel\RawPreviewExtractor\Parser\PreviewParserInterface;
 use RonanLenouvel\RawPreviewExtractor\Parser\Tiff\TiffPreviewParser;
 
 /**
- * Façade du package : détecte le format, délègue au parseur qui le prend en charge.
+ * Package facade: detects the format, delegates to the parser that handles it.
  *
- * Elle ne parse rien elle-même. La résolution se fait par **clé dans une map
- * injectée**, jamais par un `switch` sur le format : ajouter RAF ou ORF revient
- * à câbler une entrée de plus, sans toucher à cette classe.
+ * It parses nothing itself. Resolution happens by **key in an injected map**,
+ * never by a `switch` on the format: adding RAF or ORF amounts to wiring one
+ * more entry, without touching this class.
  *
  * ```php
  * $extractor = RawPreviewExtractor::createDefault();
@@ -30,12 +30,12 @@ final class RawPreviewExtractor implements RawPreviewExtractorInterface
     private readonly array $parsers;
 
     /**
-     * @param FormatDetectorInterface                 $detector identifie le format par signature
-     * @param iterable<string, PreviewParserInterface> $parsers  parseurs indexés par
-     *                                                           {@see Format::value} ; un
-     *                                                           `iterable` pour accepter aussi
-     *                                                           bien un tableau que les services
-     *                                                           taggés de Symfony
+     * @param FormatDetectorInterface                 $detector identifies the format by signature
+     * @param iterable<string, PreviewParserInterface> $parsers  parsers indexed by
+     *                                                           {@see Format::value}; an
+     *                                                           `iterable` so as to accept
+     *                                                           either an array or Symfony's
+     *                                                           tagged services
      */
     public function __construct(
         private readonly FormatDetectorInterface $detector,
@@ -45,11 +45,11 @@ final class RawPreviewExtractor implements RawPreviewExtractorInterface
     }
 
     /**
-     * Construit un extracteur câblé avec les parseurs standards.
+     * Builds an extractor wired with the standard parsers.
      *
-     * Raccourci pour les projets sans conteneur d'injection : une ligne au lieu
-     * de l'assemblage manuel. Sous Symfony, le bundle câble les mêmes services
-     * et c'est lui qui fait foi.
+     * A shortcut for projects without a dependency injection container: one line
+     * instead of manual assembly. Under Symfony, the bundle wires the same
+     * services and it is the bundle that is authoritative.
      */
     public static function createDefault(): self
     {
@@ -71,7 +71,7 @@ final class RawPreviewExtractor implements RawPreviewExtractorInterface
 
         if (null === $format || null === $parser) {
             throw new UnsupportedFormatException(sprintf(
-                'Format non supporté : %s n\'est pas un RAW que ce package sait lire.',
+                'Unsupported format: %s is not a RAW file this package can read.',
                 basename($path),
             ));
         }
@@ -83,16 +83,16 @@ final class RawPreviewExtractor implements RawPreviewExtractorInterface
     {
         $format = $this->detector->detect($path);
 
-        // Le détecteur peut reconnaître un format qu'aucun parseur ne traite :
-        // supports() doit refléter ce que la façade sait vraiment faire.
+        // The detector may recognise a format that no parser handles:
+        // supports() must reflect what the facade can really do.
         return null !== $format && isset($this->parsers[$format->value]);
     }
 
     /**
-     * Un parseur est-il câblé pour ce format ?
+     * Is a parser wired for this format?
      *
-     * Sert aux tests de câblage — de la fabrique comme du bundle — pour vérifier
-     * qu'aucun cas de {@see Format} n'a été oublié.
+     * Used by the wiring tests — of the factory as well as the bundle — to check
+     * that no {@see Format} case has been forgotten.
      */
     public function hasParserFor(Format $format): bool
     {
