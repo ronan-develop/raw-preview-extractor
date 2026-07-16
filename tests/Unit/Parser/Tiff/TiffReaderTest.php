@@ -164,6 +164,36 @@ final class TiffReaderTest extends TestCase
         self::assertSame([8], $reader->readIfdOffsets());
     }
 
+    public function testStopsFollowingChainAfterTooManyIfds(): void
+    {
+        // Une chaîne de 200 IFD : aucun RAW réel n'en a plus d'une poignée.
+        // Sans plafond, un fichier hostile ferait parcourir une chaîne sans fin.
+        $ifdSize = 2 + 12 + 4;
+        $bytes = 'II' . pack('v', 42) . pack('V', 8);
+
+        for ($i = 0; $i < 200; ++$i) {
+            $next = 8 + ($i + 1) * $ifdSize;
+            $bytes .= pack('v', 1)
+                . $this->entry(TiffTag::ImageWidth->value, 3, 1, "\x40\x06\x00\x00")
+                . pack('V', 199 === $i ? 0 : $next);
+        }
+
+        // On s'arrête au plafond au lieu de parcourir les 200.
+        self::assertCount(64, $this->reader($bytes)->readIfdOffsets());
+    }
+
+    public function testThrowsWhenValueLengthIsAbsurd(): void
+    {
+        $this->expectException(CorruptedFileException::class);
+        $this->expectExceptionMessage('absurde');
+
+        // count = 100 000 × 4 octets (LONG) = 400 Ko annoncés dans un fichier
+        // de 26 octets : refuser avant d'allouer.
+        $this->reader($this->tiff('II', [
+            [TiffTag::SubIfds->value, 4, 100000, pack('V', 26)],
+        ]))->readIfd(8);
+    }
+
     public function testThrowsWhenIfdOffsetIsOutOfBounds(): void
     {
         $this->expectException(CorruptedFileException::class);

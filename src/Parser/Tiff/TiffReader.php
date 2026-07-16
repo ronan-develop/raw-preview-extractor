@@ -102,9 +102,7 @@ final class TiffReader
 
     public function __destruct()
     {
-        if (is_resource($this->handle)) {
-            fclose($this->handle);
-        }
+        fclose($this->handle);
     }
 
     /**
