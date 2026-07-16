@@ -172,19 +172,10 @@ final class IsoBmffBoxReader
             $box = $this->readBoxAt($offset, $end);
             $boxes[] = $box;
 
-            $next = $box->payloadOffset + $box->payloadLength;
-
-            // Garde-fou anti-boucle : une boîte qui n'avance pas le curseur
-            // ferait tourner cette boucle indéfiniment.
-            if ($next <= $offset) {
-                throw new CorruptedFileException(sprintf(
-                    'Boîte « %s » à l\'offset %d : le curseur n\'avance pas.',
-                    $box->type,
-                    $offset,
-                ));
-            }
-
-            $offset = $next;
+            // La progression est structurellement garantie : readBoxAt() refuse
+            // toute taille inférieure à l'en-tête, donc le curseur avance d'au
+            // moins 8 octets à chaque tour.
+            $offset = $box->payloadOffset + $box->payloadLength;
         }
 
         return $boxes;

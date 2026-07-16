@@ -179,6 +179,45 @@ final class IsoBmffBoxReaderTest extends TestCase
         self::assertSame('CHARGE UTILE', $reader->readPayload($reader->readBoxes()[0]));
     }
 
+    public function testThrowsWhenReadingBytesOutOfBounds(): void
+    {
+        $this->expectException(CorruptedFileException::class);
+        $this->expectExceptionMessage('hors bornes');
+
+        // readBytes est l'API publique du reader : Cr3PreviewParser l'appellera
+        // avec des offsets issus du fichier, donc non fiables.
+        $this->reader($this->box('PRVW', 'court'))->readBytes(9999, 10);
+    }
+
+    public function testThrowsWhenReadingZeroBytes(): void
+    {
+        $this->expectException(CorruptedFileException::class);
+
+        $this->reader($this->box('PRVW', 'court'))->readBytes(8, 0);
+    }
+
+    public function testFindUuidIgnoresBoxesTooShortForAnUuid(): void
+    {
+        // Une boîte uuid dont le payload fait moins de 16 octets ne peut pas
+        // porter d'UUID : l'ignorer plutôt que de lire hors bornes.
+        $bytes = $this->box('uuid', 'court');
+
+        self::assertNull($this->reader($bytes)->findUuid(str_repeat("\x00", 16)));
+    }
+
+    public function testFindsBoxNestedInUuidBox(): void
+    {
+        // Les filles d'une boîte uuid commencent APRÈS les 16 octets d'UUID :
+        // sans ce décalage, on lirait l'UUID comme un en-tête de boîte.
+        $uuid = hex2bin('85c0b687820f11e08111f4ce462b6a48');
+        $bytes = $this->box('uuid', $uuid . $this->box('PRVW', 'CIBLE'));
+
+        $found = $this->reader($bytes)->find('PRVW');
+
+        self::assertNotNull($found);
+        self::assertSame('PRVW', $found->type);
+    }
+
     public function testLimitsRecursionDepth(): void
     {
         // Un fichier hostile peut imbriquer des boîtes à l'infini. On s'arrête

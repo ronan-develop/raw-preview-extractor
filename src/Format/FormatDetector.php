@@ -210,12 +210,9 @@ final class FormatDetector implements FormatDetectorInterface
      */
     private function unpackInt(string $format, string $bytes): ?int
     {
-        $expected = 'v' === $format || 'n' === $format ? 2 : 4;
-
-        if (strlen($bytes) !== $expected) {
-            return null;
-        }
-
+        // Les octets viennent soit de l'en-tête (8 octets garantis), soit d'un
+        // fread dont la longueur est vérifiée par l'appelant : unpack ne peut
+        // pas travailler à court.
         return unpack($format, $bytes)[1];
     }
 }

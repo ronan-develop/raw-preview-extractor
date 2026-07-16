@@ -117,6 +117,32 @@ final class TiffPreviewParserTest extends TestCase
         self::assertSame($jpeg, $this->parser->extract($path, Format::NEF)->jpegData);
     }
 
+    public function testThrowsCorruptedWhenJpegHasNoSofSegment(): void
+    {
+        // Un bloc qui commence par FFD8 mais ne porte aucun segment SOF : le
+        // magic ne suffit pas, les dimensions doivent être trouvables.
+        $this->expectException(CorruptedFileException::class);
+        $this->expectExceptionMessage('SOF');
+
+        $fake = "\xFF\xD8" . "\xFF\xE0" . pack('n', 16) . str_repeat("\x00", 14) . "\xFF\xD9";
+
+        $entries = [
+            [TiffTag::JpegInterchangeFormat->value, 4, 1, 'OFFSET'],
+            [TiffTag::JpegInterchangeFormatLength->value, 4, 1, pack('V', strlen($fake))],
+        ];
+
+        $this->parser->extract($this->tiffWith($entries, $fake), Format::CR2);
+    }
+
+    public function testStopsDescendingBeyondMaxSubIfdDepth(): void
+    {
+        // Un fichier hostile peut chaîner des SubIFDs à l'infini. On s'arrête,
+        // donc la preview enfouie trop profond reste introuvable.
+        $this->expectException(PreviewNotFoundException::class);
+
+        $this->parser->extract($this->tiffWithDeepSubIfds($this->jpeg(16, 12), 8), Format::NEF);
+    }
+
     public function testThrowsPreviewNotFoundWhenNoJpegTag(): void
     {
         $this->expectException(PreviewNotFoundException::class);
@@ -279,6 +305,35 @@ final class TiffPreviewParserTest extends TestCase
         }
 
         return $this->file('II' . pack('v', 42) . pack('V', 8) . $body . $payload);
+    }
+
+    /**
+     * TIFF dont les sous-IFD s'enchaînent sur `$depth` niveaux, la preview
+     * n'étant qu'au tout dernier.
+     */
+    private function tiffWithDeepSubIfds(string $jpeg, int $depth): string
+    {
+        $linkSize = 2 + 12 + 4;      // un IFD à une seule entrée SubIFDs
+        $leafSize = 2 + 2 * 12 + 4;  // l'IFD feuille, avec les deux tags JPEG
+        $jpegOffset = 8 + $linkSize * $depth + $leafSize;
+
+        $body = '';
+
+        for ($i = 0; $i < $depth; ++$i) {
+            $body .= pack('v', 1)
+                . pack('v', TiffTag::SubIfds->value) . pack('v', 4)
+                . pack('V', 1) . pack('V', 8 + $linkSize * ($i + 1))
+                . pack('V', 0);
+        }
+
+        $body .= pack('v', 2)
+            . pack('v', TiffTag::JpegInterchangeFormat->value) . pack('v', 4)
+            . pack('V', 1) . pack('V', $jpegOffset)
+            . pack('v', TiffTag::JpegInterchangeFormatLength->value) . pack('v', 4)
+            . pack('V', 1) . pack('V', strlen($jpeg))
+            . pack('V', 0);
+
+        return $this->file('II' . pack('v', 42) . pack('V', 8) . $body . $jpeg);
     }
 
     /**
