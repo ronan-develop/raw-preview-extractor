@@ -1,0 +1,91 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  tests:
+    name: 🧪 PHP ${{ matrix.php }} / Symfony ${{ matrix.symfony }} ${{ matrix.flags }}
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Plancher de dépendances : prouve que "php": ">=8.2" et symfony ^6.4 sont tenus
+          - php: '8.2'
+            symfony: '6.4.*'
+            flags: '--prefer-lowest'
+          - php: '8.3'
+            symfony: '7.*'
+          - php: '8.4'
+            symfony: '7.*'
+
+    env:
+      SYMFONY_DEPRECATIONS_HELPER: max[direct]=0
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🐘 Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          # gd sert uniquement à la validation croisée des tests (getimagesizefromstring),
+          # jamais à l'extraction — cf. CLAUDE.md
+          extensions: mbstring, gd
+          coverage: xdebug
+
+      - name: 📦 Get Composer cache directory
+        id: composer-cache
+        run: echo "dir=$(composer config cache-files-dir)" >> $GITHUB_OUTPUT
+
+      - name: ♻️ Cache Composer packages
+        uses: actions/cache@v4
+        with:
+          # On cache le cache Composer, jamais vendor/ (convention Symfony)
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: composer-${{ matrix.php }}-${{ matrix.symfony }}-${{ matrix.flags }}-${{ hashFiles('composer.json') }}
+          restore-keys: composer-${{ matrix.php }}-${{ matrix.symfony }}-
+
+      - name: 🔒 Pin Symfony version
+        run: composer require --no-update --dev symfony/framework-bundle:${{ matrix.symfony }} symfony/http-kernel:${{ matrix.symfony }}
+
+      - name: 📦 Install dependencies
+        run: composer update --no-interaction --prefer-dist --no-progress ${{ matrix.flags }}
+
+      - name: ✅ Validate composer.json
+        run: composer validate --strict
+
+      - name: 🔍 Audit des dépendances
+        run: composer audit
+
+      - name: 🧪 Run PHPUnit
+        run: vendor/bin/phpunit --colors=always
+
+  coverage:
+    name: 📊 Couverture (≥ 95 %)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🐘 Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: mbstring, gd
+          coverage: xdebug
+
+      - name: 📦 Install dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: 📊 Check coverage threshold
+        env:
+          XDEBUG_MODE: coverage
+        run: vendor/bin/phpunit --coverage-text --coverage-clover=coverage.xml
