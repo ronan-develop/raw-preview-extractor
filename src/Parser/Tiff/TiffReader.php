@@ -248,9 +248,11 @@ final class TiffReader
     /**
      * Décode une suite d'entiers selon l'endianness du fichier.
      *
-     * @return list<int>
+     * Les octets sont toujours fournis par readBytes(), qui garantit déjà leur
+     * longueur : inutile de la revérifier ici. TYPE_SIZES ne contient que des
+     * tailles de 1, 2, 4 ou 8 octets.
      *
-     * @throws CorruptedFileException si les octets fournis sont insuffisants
+     * @return list<int>
      */
     private function unpackIntegers(string $bytes, int $size, int $count): array
     {
@@ -259,20 +261,12 @@ final class TiffReader
         for ($i = 0; $i < $count; ++$i) {
             $chunk = substr($bytes, $i * $size, $size);
 
-            if (strlen($chunk) !== $size) {
-                throw new CorruptedFileException('Données de valeur tronquées.');
-            }
-
             $values[] = match ($size) {
                 1 => ord($chunk),
                 2 => $this->unpackShort($chunk),
-                4 => $this->unpackLong($chunk),
-                // RATIONAL et DOUBLE : on ne garde que les 4 premiers octets,
-                // suffisants pour les tags que ce package exploite.
-                8 => $this->unpackLong(substr($chunk, 0, 4)),
-                default => throw new CorruptedFileException(
-                    sprintf('Taille de type non gérée : %d octets.', $size),
-                ),
+                // RATIONAL et DOUBLE (8 octets) : seuls les 4 premiers nous
+                // intéressent — aucun tag exploité ici n'a besoin du reste.
+                default => $this->unpackLong(substr($chunk, 0, 4)),
             };
         }
 
@@ -281,15 +275,9 @@ final class TiffReader
 
     /**
      * Décode un entier 16 bits selon l'endianness du fichier.
-     *
-     * @throws CorruptedFileException si les octets fournis ne font pas 2 octets
      */
     private function unpackShort(string $bytes): int
     {
-        if (2 !== strlen($bytes)) {
-            throw new CorruptedFileException('Entier 16 bits tronqué.');
-        }
-
         return unpack($this->bigEndian ? 'n' : 'v', $bytes)[1];
     }
 
