@@ -102,17 +102,20 @@ return [
 
 ## Tested cameras
 
-**None yet** — this is the honest answer, and the reason `1.0.0` is not tagged.
+Verified against real files from [raw.pixls.us](https://raw.pixls.us/) (CC0):
 
-Every format is covered end to end in CI against **synthetic files**: byte sequences built
-in memory, carrying a real JPEG that is read back with `getimagesizefromstring()` as an
-independent check. That proves the parsing is correct. It does not prove that a Canon 5D
-Mark IV lays out its IFDs the way this library expects.
+| Camera        | Format | File   | Preview extracted    |
+|---------------|--------|--------|----------------------|
+| Nikon D750    | NEF    | 25 MB  | 6016×4016 — 952 KB   |
+| Canon EOS R   | CR3    | 30 MB  | 1620×1080 — 228 KB   |
+| Canon EOS RP  | CR3    | 7 MB   | 1620×1080 — 328 KB   |
 
-RAW structure varies between camera generations, and CR3 has no public specification.
-Validation against real files is in progress; verified models will be listed here.
+Extraction takes **1–3 ms** regardless of file size: the file is never loaded into memory,
+only the container structure is read and the JPEG block is seeked to directly.
 
-If your camera is not listed, the library may well work — it just has not been verified.
+CR2, ARW and DNG are covered by synthetic tests but **not yet verified against real files**.
+RAW structure varies between camera generations, and CR3 has no public specification — if
+your camera is not listed, the library may well work, it just has not been verified.
 
 ## Contributing
 

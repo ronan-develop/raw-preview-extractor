@@ -13,6 +13,10 @@ clover.xml
 # en mémoire ; ces fichiers ne servent qu'à valider en local. Voir skill `fixtures`.
 /tests/Fixtures/local/
 
+# Outil de validation locale : extrait les previews des RAW ci-dessus vers
+# tests/Fixtures/local/output/ pour contrôle visuel. Non publié.
+/bin/extract-local.php
+
 .idea/
 .vscode/
 .DS_Store

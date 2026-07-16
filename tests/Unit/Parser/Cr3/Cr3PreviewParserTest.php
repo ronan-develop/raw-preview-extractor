@@ -14,8 +14,15 @@ use RonanLenouvel\RawPreviewExtractor\Parser\Cr3\Cr3PreviewParser;
 #[CoversClass(Cr3PreviewParser::class)]
 final class Cr3PreviewParserTest extends TestCase
 {
-    /** UUID Canon portant les métadonnées, dont PRVW et THMB. */
+    /**
+     * UUID Canon, sous `moov` : porte les métadonnées et THMB.
+     *
+     * Structure vérifiée sur Canon EOS R et EOS RP (raw.pixls.us).
+     */
     private const CANON_UUID = '85c0b687820f11e08111f4ce462b6a48';
+
+    /** UUID de la boîte de preview, à la RACINE — pas sous l'UUID Canon. */
+    private const PREVIEW_UUID = 'eaf42b5e1c984b88b9fbb7dc406e4d16';
 
     private Cr3PreviewParser $parser;
 
@@ -167,25 +174,42 @@ final class Cr3PreviewParserTest extends TestCase
     }
 
     /**
-     * Un CR3 minimal : ftyp + moov contenant l'UUID Canon, lui-même portant les
-     * boîtes demandées.
+     * Un CR3 reproduisant la structure **réelle**, vérifiée sur EOS R et EOS RP :
+     *
+     * ```
+     * ftyp
+     * moov
+     *   └── uuid 85c0b687…  (Canon)   → CMT1, CMT2, THMB
+     * uuid eaf42b5e…  (à la RACINE)   → PRVW
+     * mdat
+     * ```
+     *
+     * `PRVW` et `THMB` ne vivent **pas** sous le même UUID, ni au même niveau —
+     * c'est ce que la première version du parseur avait faux.
      *
      * @param array<string, string> $boxes type de boîte => contenu brut
      */
     private function cr3(array $boxes): string
     {
-        $inner = '';
+        $canonInner = '';
+        $previewInner = '';
 
         foreach ($boxes as $type => $payload) {
-            $inner .= $this->box($type, $payload);
+            if ('PRVW' === $type) {
+                $previewInner .= $this->box($type, $payload);
+            } else {
+                $canonInner .= $this->box($type, $payload);
+            }
         }
 
-        $uuid = $this->box('uuid', (string) hex2bin(self::CANON_UUID) . $inner);
+        $file = $this->box('ftyp', 'crx isom')
+            . $this->box('moov', $this->box('uuid', (string) hex2bin(self::CANON_UUID) . $canonInner));
 
-        return $this->file(
-            $this->box('ftyp', 'crx isom')
-            . $this->box('moov', $uuid),
-        );
+        if ('' !== $previewInner) {
+            $file .= $this->box('uuid', (string) hex2bin(self::PREVIEW_UUID) . $previewInner);
+        }
+
+        return $this->file($file . $this->box('mdat', str_repeat("\x00", 32)));
     }
 
     private function box(string $type, string $payload): string
