@@ -8,7 +8,10 @@ use RonanLenouvel\RawPreviewExtractor\Exception\CorruptedFileException;
 use RonanLenouvel\RawPreviewExtractor\Exception\PreviewNotFoundException;
 use RonanLenouvel\RawPreviewExtractor\ExtractedPreview;
 use RonanLenouvel\RawPreviewExtractor\Format\Format;
+use RonanLenouvel\RawPreviewExtractor\Orientation;
 use RonanLenouvel\RawPreviewExtractor\Parser\PreviewParserInterface;
+use RonanLenouvel\RawPreviewExtractor\Parser\Tiff\TiffReader;
+use RonanLenouvel\RawPreviewExtractor\Parser\Tiff\TiffTag;
 
 /**
  * Extracts the JPEG preview of a CR3 (Canon RAW v3, ISO-BMFF container).
@@ -58,6 +61,13 @@ final class Cr3PreviewParser implements PreviewParserInterface
     /** Length of the UUID that follows the type of a `uuid` box. */
     private const UUID_LENGTH = 16;
 
+    /**
+     * Box holding the EXIF of the IFD0 — the orientation among them.
+     *
+     * A CR3 has no TIFF of its own, but `CMT1` **is** one, header included.
+     */
+    private const EXIF_BOX = 'CMT1';
+
     public function extract(string $path, Format $format): ExtractedPreview
     {
         $reader = new IsoBmffBoxReader($path);
@@ -74,7 +84,13 @@ final class Cr3PreviewParser implements PreviewParserInterface
             if (null !== $jpeg) {
                 [$width, $height] = $this->readJpegDimensions($jpeg);
 
-                return new ExtractedPreview($jpeg, $width, $height, $format);
+                return new ExtractedPreview(
+                    $jpeg,
+                    $width,
+                    $height,
+                    $format,
+                    $this->readOrientation($reader, $path),
+                );
             }
         }
 
@@ -82,6 +98,50 @@ final class Cr3PreviewParser implements PreviewParserInterface
             'No JPEG preview in %s: neither PRVW nor THMB usable.',
             basename($path),
         ));
+    }
+
+    /**
+     * Reads the orientation from the `CMT1` box.
+     *
+     * A CR3 carries no TIFF of its own, but `CMT1` is one — header and all. The
+     * reader works on that window of the host file: no temporary file, no copy
+     * in memory.
+     *
+     * The box is absent on some models, and nothing guarantees its content.
+     * Neither is a reason to fail an extraction that otherwise succeeded, so an
+     * unreadable orientation is assumed upright.
+     *
+     * @throws CorruptedFileException if the box structure is invalid
+     */
+    private function readOrientation(IsoBmffBoxReader $reader, string $path): Orientation
+    {
+        $canon = $reader->findUuid((string) hex2bin(self::PREVIEW_LOCATIONS[1]['uuid']));
+
+        if (null === $canon) {
+            return Orientation::Normal;
+        }
+
+        $box = $this->findWithin($reader, $canon, self::EXIF_BOX);
+
+        if (null === $box) {
+            return Orientation::Normal;
+        }
+
+        try {
+            $tiff = TiffReader::fromRange($path, $box->payloadOffset, $box->payloadLength);
+
+            foreach ($tiff->readIfd($tiff->readIfdOffsets()[0] ?? 8) as $entry) {
+                if (TiffTag::Orientation->value === $entry->tag) {
+                    return Orientation::fromExif($entry->value());
+                }
+            }
+        } catch (CorruptedFileException) {
+            // CMT1 exists but holds no readable TIFF. That is metadata trouble,
+            // not preview trouble: the JPEG we found is still fine.
+            return Orientation::Normal;
+        }
+
+        return Orientation::Normal;
     }
 
     /**

@@ -9,6 +9,7 @@ use PHPUnit\Framework\TestCase;
 use RonanLenouvel\RawPreviewExtractor\Exception\CorruptedFileException;
 use RonanLenouvel\RawPreviewExtractor\Exception\PreviewNotFoundException;
 use RonanLenouvel\RawPreviewExtractor\Format\Format;
+use RonanLenouvel\RawPreviewExtractor\Orientation;
 use RonanLenouvel\RawPreviewExtractor\Parser\Cr3\Cr3PreviewParser;
 
 #[CoversClass(Cr3PreviewParser::class)]
@@ -52,6 +53,30 @@ final class Cr3PreviewParserTest extends TestCase
 
         self::assertSame($jpeg, $preview->jpegData);
         self::assertSame(Format::CR3, $preview->sourceFormat);
+    }
+
+    public function testReportsOrientationFromCmt1(): void
+    {
+        // Le CR3 n'a pas d'IFD TIFF direct : son orientation vit dans la boîte
+        // CMT1, qui EST un TIFF complet. TiffReader::fromRange() la lit en
+        // place, sans fichier temporaire ni copie mémoire.
+        $jpeg = $this->jpeg(64, 48);
+        $path = $this->cr3(['PRVW' => $jpeg], orientation: 6);
+
+        $preview = $this->parser->extract($path, Format::CR3);
+
+        self::assertSame(Orientation::Rotate90, $preview->orientation);
+        self::assertSame(90, $preview->orientation->degrees());
+    }
+
+    public function testDefaultsToNormalWhenCmt1IsAbsent(): void
+    {
+        // Tous les CR3 n'ont pas de CMT1 exploitable : son absence n'est pas une
+        // erreur, on suppose l'image droite.
+        $preview = $this->parser->extract($this->cr3(['PRVW' => $this->jpeg(32, 24)]), Format::CR3);
+
+        self::assertSame(Orientation::Normal, $preview->orientation);
+        self::assertTrue($preview->orientation->isUpright());
     }
 
     public function testExtractedJpegHasValidDimensions(): void
@@ -189,7 +214,7 @@ final class Cr3PreviewParserTest extends TestCase
      *
      * @param array<string, string> $boxes type de boîte => contenu brut
      */
-    private function cr3(array $boxes): string
+    private function cr3(array $boxes, ?int $orientation = null): string
     {
         $canonInner = '';
         $previewInner = '';
@@ -202,6 +227,12 @@ final class Cr3PreviewParserTest extends TestCase
             }
         }
 
+        if (null !== $orientation) {
+            // CMT1 est un TIFF complet, en-tête compris : c'est ce que contient
+            // un vrai CR3.
+            $canonInner = $this->box('CMT1', $this->tiffWithOrientation($orientation)) . $canonInner;
+        }
+
         $file = $this->box('ftyp', 'crx isom')
             . $this->box('moov', $this->box('uuid', (string) hex2bin(self::CANON_UUID) . $canonInner));
 
@@ -210,6 +241,17 @@ final class Cr3PreviewParserTest extends TestCase
         }
 
         return $this->file($file . $this->box('mdat', str_repeat("\x00", 32)));
+    }
+
+    /**
+     * Un TIFF minimal ne portant que le tag Orientation — la forme de CMT1.
+     */
+    private function tiffWithOrientation(int $orientation): string
+    {
+        return 'II' . pack('v', 42) . pack('V', 8)
+            . pack('v', 1)
+            . pack('v', 0x0112) . pack('v', 3) . pack('V', 1) . pack('v', $orientation) . "\x00\x00"
+            . pack('V', 0);
     }
 
     private function box(string $type, string $payload): string

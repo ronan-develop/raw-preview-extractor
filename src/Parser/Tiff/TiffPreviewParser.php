@@ -8,6 +8,7 @@ use RonanLenouvel\RawPreviewExtractor\Exception\CorruptedFileException;
 use RonanLenouvel\RawPreviewExtractor\Exception\PreviewNotFoundException;
 use RonanLenouvel\RawPreviewExtractor\ExtractedPreview;
 use RonanLenouvel\RawPreviewExtractor\Format\Format;
+use RonanLenouvel\RawPreviewExtractor\Orientation;
 use RonanLenouvel\RawPreviewExtractor\Parser\PreviewParserInterface;
 
 /**
@@ -55,10 +56,15 @@ final class TiffPreviewParser implements PreviewParserInterface
     {
         $reader = new TiffReader($path);
         $candidates = [];
+        $offsets = $reader->readIfdOffsets();
 
-        foreach ($reader->readIfdOffsets() as $offset) {
+        foreach ($offsets as $offset) {
             $this->collectFromIfd($reader, $offset, $candidates, 0);
         }
+
+        // The orientation of the IFD0 applies to the whole shot, previews
+        // included: the camera records how it was held once, not per image.
+        $orientation = $this->readOrientation($reader, $offsets[0] ?? null);
 
         // The largest preview is the most useful: a RAW often carries several,
         // from the 160x120 thumbnail to full resolution.
@@ -67,7 +73,7 @@ final class TiffPreviewParser implements PreviewParserInterface
         // A candidate is only kept if it is genuinely decodable: the biggest
         // block of a CR2 is the sensor in lossless JPEG, not a preview.
         foreach ($candidates as $candidate) {
-            $preview = $this->tryBuildPreview($reader, $candidate, $format);
+            $preview = $this->tryBuildPreview($reader, $candidate, $format, $orientation);
 
             if (null !== $preview) {
                 return $preview;
@@ -76,6 +82,28 @@ final class TiffPreviewParser implements PreviewParserInterface
 
         throw new PreviewNotFoundException(
             sprintf('No usable JPEG preview in %s.', basename($path)),
+        );
+    }
+
+    /**
+     * Reads the EXIF orientation of the IFD0.
+     *
+     * The tag is often absent, and out-of-spec values do occur. Neither is a
+     * reason to fail an otherwise successful extraction: an unknown orientation
+     * is assumed upright.
+     *
+     * @throws CorruptedFileException if the IFD cannot be read
+     */
+    private function readOrientation(TiffReader $reader, ?int $ifd0Offset): Orientation
+    {
+        if (null === $ifd0Offset) {
+            return Orientation::Normal;
+        }
+
+        $entries = $this->indexByTag($reader->readIfd($ifd0Offset));
+
+        return Orientation::fromExif(
+            ($entries[TiffTag::Orientation->value] ?? null)?->value(),
         );
     }
 
@@ -179,7 +207,12 @@ final class TiffPreviewParser implements PreviewParserInterface
      *
      * @throws CorruptedFileException
      */
-    private function tryBuildPreview(TiffReader $reader, array $candidate, Format $format): ?ExtractedPreview
+    private function tryBuildPreview(
+        TiffReader $reader,
+        array $candidate,
+        Format $format,
+        Orientation $orientation,
+    ): ?ExtractedPreview
     {
         $jpeg = $reader->readBytes($candidate['offset'], $candidate['length']);
 
@@ -200,7 +233,7 @@ final class TiffPreviewParser implements PreviewParserInterface
             return null;
         }
 
-        return new ExtractedPreview($jpeg, $sof['width'], $sof['height'], $format);
+        return new ExtractedPreview($jpeg, $sof['width'], $sof['height'], $format, $orientation);
     }
 
     /**
