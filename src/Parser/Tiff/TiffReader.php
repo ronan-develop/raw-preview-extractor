@@ -62,7 +62,20 @@ final class TiffReader
     private $handle;
 
     private readonly bool $bigEndian;
+
+    /**
+     * Where the TIFF starts inside the host file.
+     *
+     * Zero for a plain TIFF. Non-zero when the TIFF is embedded in a larger
+     * container — a CR3 carries complete TIFFs in its `CMT1`/`CMT2` boxes. Every
+     * offset a TIFF declares counts from *its own* start, so this base is added
+     * on every read and never leaks outside this class.
+     */
+    private readonly int $base;
+
+    /** Size of the readable window: the whole file, or the embedded TIFF. */
     private readonly int $fileSize;
+
     private readonly int $firstIfdOffset;
 
     /**
@@ -70,18 +83,31 @@ final class TiffReader
      *
      * @throws CorruptedFileException if the file is unreadable or is not a TIFF
      */
-    public function __construct(private readonly string $path)
+    public function __construct(string $path, int $base = 0, ?int $length = null)
     {
         if (!is_file($path)) {
             throw new CorruptedFileException(sprintf('Unreadable file: %s', $path));
+        }
+
+        $realSize = (int) filesize($path);
+
+        if ($base < 0 || $base + ($length ?? 0) > $realSize) {
+            throw new CorruptedFileException(sprintf(
+                'TIFF range out of bounds: %d bytes at offset %d (file size: %d).',
+                $length ?? 0,
+                $base,
+                $realSize,
+            ));
         }
 
         // is_file() has already ruled out the missing file and the directory:
         // fopen can now only fail on a permissions problem, which @ would
         // absorb silently — so we let it bubble up.
         $this->handle = fopen($path, 'rb');
-        $this->fileSize = (int) filesize($path);
+        $this->base = $base;
+        $this->fileSize = $length ?? $realSize;
 
+        fseek($this->handle, $this->base);
         $header = (string) fread($this->handle, self::HEADER_LENGTH);
 
         if (self::HEADER_LENGTH !== strlen($header)) {
@@ -105,6 +131,26 @@ final class TiffReader
         }
 
         $this->firstIfdOffset = $this->unpackLong(substr($header, 4, 4));
+    }
+
+    /**
+     * Reads a TIFF embedded inside a larger file.
+     *
+     * A CR3 stores complete TIFFs in its `CMT1`/`CMT2` boxes: this reads them in
+     * place, with no temporary file and no copy in memory. Reads are bounded to
+     * the window — an offset pointing outside it is out of bounds, even though
+     * it lands inside the host file.
+     *
+     * @param string $path   path of the host file
+     * @param int    $offset where the embedded TIFF starts
+     * @param int    $length its length in bytes
+     *
+     * @throws CorruptedFileException if the range falls outside the file, or
+     *                                does not hold a valid TIFF
+     */
+    public static function fromRange(string $path, int $offset, int $length): self
+    {
+        return new self($path, $offset, $length);
     }
 
     public function __destruct()
@@ -245,7 +291,9 @@ final class TiffReader
             ));
         }
 
-        fseek($this->handle, $offset);
+        // Offsets are relative to the TIFF's own start; the base translates them
+        // to the host file. It is zero for a plain TIFF, so this costs nothing.
+        fseek($this->handle, $this->base + $offset);
 
         // The range is already bounded against fileSize: fread returns exactly
         // $length bytes.

@@ -10,6 +10,7 @@ use RonanLenouvel\RawPreviewExtractor\ExtractedPreview;
 use RonanLenouvel\RawPreviewExtractor\Exception\CorruptedFileException;
 use RonanLenouvel\RawPreviewExtractor\Exception\PreviewNotFoundException;
 use RonanLenouvel\RawPreviewExtractor\Format\Format;
+use RonanLenouvel\RawPreviewExtractor\Orientation;
 use RonanLenouvel\RawPreviewExtractor\Parser\Tiff\TiffPreviewParser;
 use RonanLenouvel\RawPreviewExtractor\Parser\Tiff\TiffTag;
 
@@ -45,6 +46,53 @@ final class TiffPreviewParserTest extends TestCase
 
         self::assertSame($jpeg, $preview->jpegData);
         self::assertSame(Format::CR2, $preview->sourceFormat);
+    }
+
+    public function testReportsOrientationFromIfd0(): void
+    {
+        // Cas de l'iPhone 12 Pro : Orientation = 6 dans l'IFD0, la preview sort
+        // couchée à 90°. Sans cette information, l'appelant ne peut pas la
+        // redresser — et nous ne pouvons pas le faire pour lui sans GD.
+        $jpeg = $this->jpeg(64, 48);
+
+        $entries = [
+            [TiffTag::Orientation->value, 3, 1, pack('v', 6) . "\x00\x00"],
+            [TiffTag::JpegInterchangeFormat->value, 4, 1, 'OFFSET'],
+            [TiffTag::JpegInterchangeFormatLength->value, 4, 1, pack('V', strlen($jpeg))],
+        ];
+
+        $preview = $this->parser->extract($this->tiffWith($entries, $jpeg), Format::DNG);
+
+        self::assertSame(Orientation::Rotate90, $preview->orientation);
+        self::assertSame(90, $preview->orientation->degrees());
+        self::assertFalse($preview->orientation->isUpright());
+    }
+
+    public function testDefaultsToNormalWhenTagIsAbsent(): void
+    {
+        // La plupart des RAW n'ont pas ce tag, ou le mettent à 1. Une absence
+        // n'est pas une erreur : on suppose l'image droite.
+        $preview = $this->parser->extract($this->tiffWithJpeg($this->jpeg(32, 24)), Format::CR2);
+
+        self::assertSame(Orientation::Normal, $preview->orientation);
+        self::assertTrue($preview->orientation->isUpright());
+    }
+
+    public function testToleratesOrientationOutOfSpec(): void
+    {
+        // Un tag à 42 ne doit pas faire échouer une extraction par ailleurs
+        // réussie.
+        $jpeg = $this->jpeg(16, 16);
+
+        $entries = [
+            [TiffTag::Orientation->value, 3, 1, pack('v', 42) . "\x00\x00"],
+            [TiffTag::JpegInterchangeFormat->value, 4, 1, 'OFFSET'],
+            [TiffTag::JpegInterchangeFormatLength->value, 4, 1, pack('V', strlen($jpeg))],
+        ];
+
+        $preview = $this->parser->extract($this->tiffWith($entries, $jpeg), Format::NEF);
+
+        self::assertSame(Orientation::Normal, $preview->orientation);
     }
 
     public function testExtractedJpegHasValidDimensions(): void
