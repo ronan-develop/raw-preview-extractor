@@ -27,6 +27,56 @@ final class TiffReaderTest extends TestCase
         $this->tempFiles = [];
     }
 
+    public function testReadsATiffEmbeddedInALargerFile(): void
+    {
+        // Le CR3 range un TIFF complet dans sa boîte CMT1, au milieu du fichier.
+        // Le reader doit pouvoir travailler sur une fenêtre : ni copie mémoire,
+        // ni fichier temporaire.
+        $tiff = $this->tiff('II', [[TiffTag::Orientation->value, 3, 1, pack('v', 6) . "\x00\x00"]]);
+        $bytes = str_repeat("\xAA", 100) . $tiff . str_repeat("\xBB", 100);
+
+        $reader = TiffReader::fromRange($this->file($bytes), 100, strlen($tiff));
+
+        self::assertSame(6, $reader->readIfd(8)[0]->value());
+    }
+
+    public function testRangeOffsetsAreRelativeToTheEmbeddedTiff(): void
+    {
+        // Les offsets d'un TIFF embarqué comptent depuis SON début, pas depuis
+        // celui du fichier hôte. Confondre les deux lit n'importe où.
+        $value = "NIKON\x00";
+        $entry = pack('v', TiffTag::Make->value) . pack('v', 2)
+            . pack('V', strlen($value)) . pack('V', 26);   // ← offset interne
+
+        $tiff = 'II' . pack('v', 42) . pack('V', 8)
+            . pack('v', 1) . $entry . pack('V', 0) . $value;
+
+        $reader = TiffReader::fromRange($this->file(str_repeat("\x00", 512) . $tiff), 512, strlen($tiff));
+
+        self::assertSame('NIKON', $reader->readIfd(8)[0]->ascii);
+    }
+
+    public function testRangeRefusesToReadBeyondItsWindow(): void
+    {
+        // Une plage borne la lecture : un offset qui sort de la fenêtre est
+        // hors bornes, même s'il pointe dans le fichier hôte.
+        $this->expectException(CorruptedFileException::class);
+        $this->expectExceptionMessage('out of bounds');
+
+        $tiff = $this->tiff('II', []);
+        $bytes = $tiff . str_repeat("\xFF", 1000);   // 1000 octets APRÈS la plage
+
+        TiffReader::fromRange($this->file($bytes), 0, strlen($tiff))
+            ->readBytes(strlen($tiff) + 10, 4);
+    }
+
+    public function testThrowsWhenRangeIsOutsideTheFile(): void
+    {
+        $this->expectException(CorruptedFileException::class);
+
+        TiffReader::fromRange($this->file($this->tiff('II', [])), 9999, 100);
+    }
+
     public function testReadsLittleEndianHeader(): void
     {
         $reader = $this->reader($this->tiff('II', [[TiffTag::ImageWidth->value, 3, 1, "\x40\x06\x00\x00"]]));
@@ -395,10 +445,21 @@ final class TiffReaderTest extends TestCase
 
     private function reader(string $bytes): TiffReader
     {
+        return new TiffReader($this->file($bytes));
+    }
+
+    /**
+     * Écrit les octets dans un fichier temporaire et rend son chemin.
+     *
+     * Utile aux tests de fromRange(), qui ont besoin du chemin plutôt que d'un
+     * reader déjà construit.
+     */
+    private function file(string $bytes): string
+    {
         $path = tempnam(sys_get_temp_dir(), 'tiff');
         file_put_contents($path, $bytes);
         $this->tempFiles[] = $path;
 
-        return new TiffReader($path);
+        return $path;
     }
 }
