@@ -90,6 +90,7 @@ final readonly class ExtractedPreview
         public int $width,
         public int $height,
         public Format $sourceFormat,
+        public Orientation $orientation = Orientation::Normal,
     ) {}
 }
 ```
@@ -100,6 +101,31 @@ claims 4000×3000 over a 48×36 preview will report 48×36.
 
 `$jpegData` is validated: its `FFD8` magic is checked, and its SOF marker is confirmed
 decodable before it is returned.
+
+### `Orientation`
+
+The camera records how it was held; it does not rotate the preview. A portrait shot
+therefore comes out lying on its side — verified on an iPhone 12 Pro, which writes
+`Orientation = 6`.
+
+Rotating it here would need GD. Instead the enum carries what a caller actually needs:
+
+| Method | Answers |
+|--------|---------|
+| `degrees()` | 0, 90, 180 or 270 — what `imagerotate()` and CSS `rotate()` take |
+| `isUpright()` | the common case, in one check |
+| `isMirrored()` | four of the eight EXIF values are mirrors, not rotations |
+| `swapsDimensions()` | a quarter turn swaps width and height |
+
+Where it is read from:
+
+- **TIFF formats** — tag `0x0112` of the IFD0. It applies to the whole shot, previews
+  included: the camera records its position once, not per image.
+- **CR3** — no TIFF of its own, so it comes from the `CMT1` box, which *is* a complete
+  TIFF. `TiffReader::fromRange()` reads it in place, without a temporary file.
+
+An absent tag, or a value outside the 1-8 range, yields `Normal` rather than failing an
+otherwise successful extraction.
 
 ### `Format`
 

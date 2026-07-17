@@ -67,6 +67,39 @@ try {
 }
 ```
 
+### Orientation
+
+A preview is stored exactly as the sensor captured it: a shot taken in portrait comes out
+**lying on its side**. The camera records the rotation rather than applying it.
+
+This library does not rotate the image — that would need GD, the very dependency it exists
+to avoid. It tells you what the file says:
+
+```php
+$preview->orientation;                  // Orientation::Rotate90
+$preview->orientation->degrees();       // 90
+$preview->orientation->isUpright();     // false
+$preview->orientation->isMirrored();    // false — 4 of the 8 EXIF values are mirrors
+$preview->orientation->swapsDimensions();  // true — width and height swap on a quarter turn
+```
+
+In a browser, fixing it costs nothing:
+
+```php
+printf('<img src="thumb.jpg" style="transform: rotate(%ddeg)">',
+    $preview->orientation->degrees());
+```
+
+Server-side, if you do have GD — note it rotates counter-clockwise:
+
+```php
+$image = imagecreatefromstring($preview->jpegData);
+
+if (!$preview->orientation->isUpright()) {
+    $image = imagerotate($image, -$preview->orientation->degrees(), 0);
+}
+```
+
 Check support before extracting:
 
 ```php
