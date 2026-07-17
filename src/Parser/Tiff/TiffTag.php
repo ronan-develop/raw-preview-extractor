@@ -22,6 +22,14 @@ enum TiffTag: int
     /** Compression scheme: 6 or 7 = JPEG, 1 = uncompressed. */
     case Compression = 0x0103;
 
+    /**
+     * How the camera was held — 1 to 8.
+     *
+     * A preview is stored as the sensor captured it: when the tag is not 1, the
+     * JPEG comes out rotated or mirrored. See {@see \RonanLenouvel\RawPreviewExtractor\Orientation}.
+     */
+    case Orientation = 0x0112;
+
     /** Camera manufacturer. */
     case Make = 0x010F;
 
