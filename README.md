@@ -1,6 +1,6 @@
 # Raw Preview Extractor
 
-Extract the JPEG preview embedded in camera RAW files — **pure PHP, no external binaries**.
+Extract the JPEG preview embedded in camera RAW files — **pure PHP, no decoding, no external binaries**.
 
 [![CI](https://github.com/ronan-develop/raw-preview-extractor/actions/workflows/ci.yml/badge.svg)](https://github.com/ronan-develop/raw-preview-extractor/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
