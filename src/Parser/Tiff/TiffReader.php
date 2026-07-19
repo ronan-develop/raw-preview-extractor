@@ -42,6 +42,10 @@ final class TiffReader
      */
     private const MAX_RESOLVED_VALUE_LENGTH = 65536;
 
+    /** TIFF type codes for the two rational (numerator/denominator) types. */
+    private const TYPE_RATIONAL = 5;
+    private const TYPE_SRATIONAL = 10;
+
     /** Size in bytes of each TIFF 6.0 type, indexed by type code. */
     private const TYPE_SIZES = [
         1 => 1,   // BYTE
@@ -268,7 +272,7 @@ final class TiffReader
             return new IfdEntry($tag, $type, $count, [], rtrim($raw, "\x00"));
         }
 
-        return new IfdEntry($tag, $type, $count, $this->unpackIntegers($raw, $size, $count));
+        return new IfdEntry($tag, $type, $count, $this->unpackIntegers($raw, $type, $size, $count));
     }
 
     /**
@@ -307,20 +311,31 @@ final class TiffReader
      * length: no need to check it again here. TYPE_SIZES only contains sizes of
      * 1, 2, 4 or 8 bytes.
      *
+     * A RATIONAL (type 5) or SRATIONAL (type 10) is a numerator/denominator
+     * pair: both halves are kept, side by side, so a caller can rebuild the
+     * fraction (see {@see IfdEntry::rational()}). A plain 8-byte value (DOUBLE)
+     * keeps its historical behaviour — its first 4 bytes — as no tag needs more.
+     *
      * @return list<int>
      */
-    private function unpackIntegers(string $bytes, int $size, int $count): array
+    private function unpackIntegers(string $bytes, int $type, int $size, int $count): array
     {
+        $isRational = self::TYPE_RATIONAL === $type || self::TYPE_SRATIONAL === $type;
         $values = [];
 
         for ($i = 0; $i < $count; ++$i) {
             $chunk = substr($bytes, $i * $size, $size);
 
+            if ($isRational) {
+                $values[] = $this->unpackLong(substr($chunk, 0, 4)); // numerator
+                $values[] = $this->unpackLong(substr($chunk, 4, 4)); // denominator
+
+                continue;
+            }
+
             $values[] = match ($size) {
                 1 => ord($chunk),
                 2 => $this->unpackShort($chunk),
-                // RATIONAL and DOUBLE (8 bytes): only the first 4 are of
-                // interest to us — no tag used here needs the rest.
                 default => $this->unpackLong(substr($chunk, 0, 4)),
             };
         }
