@@ -127,6 +127,44 @@ Extraction is O(1) in file size: a 30 MB RAW takes the same ~2 ms as a 7 MB one,
 the file is never loaded — only its container structure is read, then the JPEG block is
 seeked to directly.
 
+### Metadata
+
+Alongside the preview, the extractor reads the **shooting settings** from the RAW's EXIF —
+what a photographer wants next to the image: when it was taken, and how.
+
+```php
+$preview = $extractor->extract('/path/to/photo.cr2');
+
+$meta = $preview->metadata;              // RawMetadata|null
+
+$meta?->dateTimeOriginal;                // "2024:06:15 12:30:45" (raw EXIF form)
+$meta?->fNumber;                         // 2.8   (aperture, float)
+$meta?->exposureTime;                    // "1/250" (shutter, fraction kept intact)
+$meta?->iso;                             // 400
+$meta?->focalLength;                     // 50.0  (millimetres)
+$meta?->lensModel;                       // "RF50mm F1.8 STM"
+$meta?->cameraMake;                      // "Canon"
+$meta?->cameraModel;                     // "Canon EOS R5"
+```
+
+Every field is nullable, and so is `$preview->metadata` itself: a tag may be absent, an old
+body says less than a recent one, and a partial read is never a failure. `RawMetadata::isEmpty()`
+tells a caller nothing usable was found, in one call:
+
+```php
+if ($meta !== null && !$meta->isEmpty()) {
+    // display the shooting settings
+}
+```
+
+Values are exposed exactly as the file encodes them — no rounding, no locale: the shutter
+speed keeps its fraction (`"1/250"` reads better than `0.004`), the aperture stays a plain
+number. Metadata is read from the same container walk as the preview, so it costs nothing
+extra.
+
+> Coverage follows the TIFF-based formats (CR2, NEF, ARW, DNG), which carry EXIF in a
+> standard IFD. For CR3 (ISO-BMFF) the preview is returned but `metadata` is currently `null`.
+
 ### Exceptions
 
 All of them implement `RawPreviewExtractorException`:

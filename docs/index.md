@@ -91,6 +91,7 @@ final readonly class ExtractedPreview
         public int $height,
         public Format $sourceFormat,
         public Orientation $orientation = Orientation::Normal,
+        public ?RawMetadata $metadata = null,   // shooting settings, or null
     ) {}
 }
 ```
@@ -101,6 +102,35 @@ claims 4000×3000 over a 48×36 preview will report 48×36.
 
 `$jpegData` is validated: its `FFD8` magic is checked, and its SOF marker is confirmed
 decodable before it is returned.
+
+`$metadata` carries the shooting settings read from EXIF (see below); it is `null` when the
+format carries none this package can reach.
+
+### `RawMetadata`
+
+```php
+final readonly class RawMetadata
+{
+    public function __construct(
+        public ?string $dateTimeOriginal = null,  // "YYYY:MM:DD HH:MM:SS"
+        public ?float $fNumber = null,             // aperture, e.g. 2.8
+        public ?string $exposureTime = null,       // shutter, e.g. "1/250"
+        public ?int $iso = null,
+        public ?float $focalLength = null,         // millimetres
+        public ?string $lensModel = null,
+        public ?string $cameraMake = null,
+        public ?string $cameraModel = null,
+    ) {}
+
+    public function isEmpty(): bool;               // true when every field is null
+}
+```
+
+Every field is nullable: a tag may be absent, and a partial read is not a failure. Values
+are exposed as the file encodes them — the shutter speed keeps its fraction, the aperture
+stays a plain number. Read from the same container walk as the preview, so it costs nothing
+extra. TIFF-based formats (CR2, NEF, ARW, DNG) are covered; CR3 returns the preview with
+`metadata` currently `null`.
 
 ### `Orientation`
 
