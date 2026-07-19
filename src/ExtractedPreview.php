@@ -30,9 +30,13 @@ final readonly class ExtractedPreview
      * @param int         $width        preview width in pixels, as encoded
      * @param int         $height       preview height in pixels, as encoded
      * @param Format      $sourceFormat format of the RAW file it came from
-     * @param Orientation $orientation  how the camera was held; defaults to
-     *                                  {@see Orientation::Normal} when the file
-     *                                  says nothing
+     * @param Orientation      $orientation how the camera was held; defaults to
+     *                                      {@see Orientation::Normal} when the file
+     *                                      says nothing
+     * @param RawMetadata|null $metadata    shooting settings read from EXIF (date,
+     *                                      aperture, shutter, ISO, focal length,
+     *                                      lens, camera); null when the format
+     *                                      carries none this package can reach
      */
     public function __construct(
         public string $jpegData,
@@ -40,6 +44,7 @@ final readonly class ExtractedPreview
         public int $height,
         public Format $sourceFormat,
         public Orientation $orientation = Orientation::Normal,
+        public ?RawMetadata $metadata = null,
     ) {
     }
 }

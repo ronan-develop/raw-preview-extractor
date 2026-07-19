@@ -44,4 +44,41 @@ final readonly class IfdEntry
     {
         return $this->values[0] ?? null;
     }
+
+    /**
+     * First RATIONAL value as a float, or null.
+     *
+     * A RATIONAL is a numerator/denominator pair; {@see TiffReader} stores both
+     * halves side by side in {@see $values}. Returns null when the entry is not
+     * a resolved rational or the denominator is zero (a lie, not a value).
+     */
+    public function rational(): ?float
+    {
+        [$numerator, $denominator] = [$this->values[0] ?? null, $this->values[1] ?? null];
+
+        if (null === $numerator || null === $denominator || 0 === $denominator) {
+            return null;
+        }
+
+        return $numerator / $denominator;
+    }
+
+    /**
+     * First RATIONAL value as its raw numerator/denominator pair, or null.
+     *
+     * Lets a caller keep the fraction intact — a 1/250 s shutter speed reads
+     * better as "1/250" than as "0.004".
+     *
+     * @return array{int, int}|null
+     */
+    public function rationalPair(): ?array
+    {
+        [$numerator, $denominator] = [$this->values[0] ?? null, $this->values[1] ?? null];
+
+        if (null === $numerator || null === $denominator) {
+            return null;
+        }
+
+        return [$numerator, $denominator];
+    }
 }

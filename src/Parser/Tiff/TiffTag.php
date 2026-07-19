@@ -56,4 +56,24 @@ enum TiffTag: int
 
     /** Present only in DNG files. */
     case DngVersion = 0xC612;
+
+    // --- EXIF IFD tags (reachable through ExifIfdPointer): shooting settings ---
+
+    /** Shutter speed, RATIONAL seconds (e.g. 1/250). */
+    case ExposureTime = 0x829A;
+
+    /** Aperture, RATIONAL f-number (e.g. 28/10 → f/2.8). */
+    case FNumber = 0x829D;
+
+    /** ISO sensitivity, SHORT. */
+    case IsoSpeedRatings = 0x8827;
+
+    /** Capture date/time, ASCII "YYYY:MM:DD HH:MM:SS". */
+    case DateTimeOriginal = 0x9003;
+
+    /** Focal length, RATIONAL millimetres. */
+    case FocalLength = 0x920A;
+
+    /** Lens model, ASCII. */
+    case LensModel = 0xA434;
 }
