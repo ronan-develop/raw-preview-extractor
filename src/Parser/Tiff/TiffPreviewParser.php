@@ -10,6 +10,7 @@ use RonanLenouvel\RawPreviewExtractor\ExtractedPreview;
 use RonanLenouvel\RawPreviewExtractor\Format\Format;
 use RonanLenouvel\RawPreviewExtractor\Orientation;
 use RonanLenouvel\RawPreviewExtractor\Parser\PreviewParserInterface;
+use RonanLenouvel\RawPreviewExtractor\RawMetadata;
 
 /**
  * Extracts the JPEG preview of RAW files built on TIFF: CR2, NEF, ARW and DNG.
@@ -66,6 +67,10 @@ final class TiffPreviewParser implements PreviewParserInterface
         // included: the camera records how it was held once, not per image.
         $orientation = $this->readOrientation($reader, $offsets[0] ?? null);
 
+        // The shooting settings likewise belong to the shot, not to a given
+        // preview: read once from the IFD0 and its EXIF sub-IFD.
+        $metadata = $this->readMetadata($reader, $offsets[0] ?? null);
+
         // The largest preview is the most useful: a RAW often carries several,
         // from the 160x120 thumbnail to full resolution.
         usort($candidates, static fn (array $a, array $b): int => $b['length'] <=> $a['length']);
@@ -73,7 +78,7 @@ final class TiffPreviewParser implements PreviewParserInterface
         // A candidate is only kept if it is genuinely decodable: the biggest
         // block of a CR2 is the sensor in lossless JPEG, not a preview.
         foreach ($candidates as $candidate) {
-            $preview = $this->tryBuildPreview($reader, $candidate, $format, $orientation);
+            $preview = $this->tryBuildPreview($reader, $candidate, $format, $orientation, $metadata);
 
             if (null !== $preview) {
                 return $preview;
@@ -212,6 +217,7 @@ final class TiffPreviewParser implements PreviewParserInterface
         array $candidate,
         Format $format,
         Orientation $orientation,
+        ?RawMetadata $metadata,
     ): ?ExtractedPreview
     {
         $jpeg = $reader->readBytes($candidate['offset'], $candidate['length']);
@@ -233,7 +239,73 @@ final class TiffPreviewParser implements PreviewParserInterface
             return null;
         }
 
-        return new ExtractedPreview($jpeg, $sof['width'], $sof['height'], $format, $orientation);
+        return new ExtractedPreview($jpeg, $sof['width'], $sof['height'], $format, $orientation, $metadata);
+    }
+
+    /**
+     * Reads the shooting settings from the IFD0 (camera) and its EXIF sub-IFD
+     * (aperture, shutter, ISO, focal length, lens, date).
+     *
+     * A missing tag, or an absent EXIF IFD, is never a reason to fail: each
+     * field falls back to null. Returns null only when there is no IFD0 at all.
+     *
+     * @throws CorruptedFileException if an announced IFD cannot be read
+     */
+    private function readMetadata(TiffReader $reader, ?int $ifd0Offset): ?RawMetadata
+    {
+        if (null === $ifd0Offset) {
+            return null;
+        }
+
+        $ifd0 = $this->indexByTag($reader->readIfd($ifd0Offset));
+
+        $exif = [];
+        $exifPointer = ($ifd0[TiffTag::ExifIfdPointer->value] ?? null)?->value();
+        if (null !== $exifPointer) {
+            $exif = $this->indexByTag($reader->readIfd($exifPointer));
+        }
+
+        $asciiOrNull = static fn (?IfdEntry $e): ?string => (null !== $e && '' !== $e->ascii) ? $e->ascii : null;
+
+        return new RawMetadata(
+            dateTimeOriginal: $asciiOrNull($exif[TiffTag::DateTimeOriginal->value] ?? null),
+            fNumber: ($exif[TiffTag::FNumber->value] ?? null)?->rational(),
+            exposureTime: $this->formatExposure($exif[TiffTag::ExposureTime->value] ?? null),
+            iso: ($exif[TiffTag::IsoSpeedRatings->value] ?? null)?->value(),
+            focalLength: ($exif[TiffTag::FocalLength->value] ?? null)?->rational(),
+            lensModel: $asciiOrNull($exif[TiffTag::LensModel->value] ?? null),
+            cameraMake: $asciiOrNull($ifd0[TiffTag::Make->value] ?? null),
+            cameraModel: $asciiOrNull($ifd0[TiffTag::Model->value] ?? null),
+        );
+    }
+
+    /**
+     * Formats a shutter-speed RATIONAL, keeping the fraction photographers read.
+     *
+     * Below one second the fraction is normalised to "1/N" (1/250); at one second
+     * or more the value is shown as trimmed decimal seconds ("2", "1.3").
+     */
+    private function formatExposure(?IfdEntry $entry): ?string
+    {
+        $pair = $entry?->rationalPair();
+
+        if (null === $pair) {
+            return null;
+        }
+
+        [$numerator, $denominator] = $pair;
+
+        if (0 === $numerator || 0 === $denominator) {
+            return null;
+        }
+
+        $seconds = $numerator / $denominator;
+
+        if ($seconds < 1.0) {
+            return '1/'.(int) round($denominator / $numerator);
+        }
+
+        return rtrim(rtrim(number_format($seconds, 1, '.', ''), '0'), '.');
     }
 
     /**
