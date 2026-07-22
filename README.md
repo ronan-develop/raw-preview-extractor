@@ -6,7 +6,7 @@ Extract the JPEG preview embedded in camera RAW files — **pure PHP, no externa
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 > **Status: feature-complete and validated against real camera files** (see
-> [Tested cameras](#tested-cameras)). Not yet tagged `1.0.0` — the public API is settled,
+> [Tested cameras](#tested-cameras)). The public API is settled,
 > but a released version is a semver commitment, and more cameras are worth testing first.
 
 ## Why
