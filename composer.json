@@ -1,6 +1,6 @@
 {
     "name": "ronanlenouvel/raw-preview-extractor",
-    "description": "Extract embedded JPEG previews from camera RAW files (CR2, CR3, NEF, ARW, DNG) in pure PHP, no external binaries.",
+    "description": "Extract embedded JPEG previews from camera RAW files (CR2, CR3, NEF, ARW, DNG) in pure PHP — no decoding, no external binaries.",
     "license": "MIT",
     "type": "library",
     "keywords": [
